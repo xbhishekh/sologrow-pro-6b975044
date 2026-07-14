@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Send, Bell, X, ExternalLink } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const TELEGRAM_URL = "https://telegram.me/organicsmmofficial";
 const LAST_SHOWN_KEY = "tg_join_popup_last_shown_v1";
+const SESSION_SHOWN_KEY = "tg_join_popup_session_shown_v1";
 const MIN_GAP_MS = 10 * 60 * 1000; // 10 minutes between popups in the same session
 
 export function TelegramJoinPopup() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    // Show on every fresh visit / login, but throttle: don't re-show within 10 min.
-    const shouldShow = () => {
+    // Rules:
+    //  - Force show on every login (SIGNED_IN event) and on every fresh browser/tab session.
+    //  - During the same session, re-show every 10 minutes.
+    const throttled = () => {
       try {
         const last = Number(localStorage.getItem(LAST_SHOWN_KEY) || 0);
         return !last || Date.now() - last >= MIN_GAP_MS;
@@ -20,14 +24,35 @@ export function TelegramJoinPopup() {
       }
     };
 
-    const trigger = () => {
-      if (!shouldShow()) return;
-      try { localStorage.setItem(LAST_SHOWN_KEY, String(Date.now())); } catch { /* ignore */ }
+    const showNow = () => {
+      try {
+        localStorage.setItem(LAST_SHOWN_KEY, String(Date.now()));
+        sessionStorage.setItem(SESSION_SHOWN_KEY, "1");
+      } catch { /* ignore */ }
       setOpen(true);
     };
 
-    // Initial show shortly after mount (covers page load & login redirect)
-    const t = window.setTimeout(trigger, 800);
+    const trigger = () => { if (throttled()) showNow(); };
+
+    // Fresh browser tab / window → force show (bypasses the 10-min throttle)
+    const isFreshSession = (() => {
+      try { return !sessionStorage.getItem(SESSION_SHOWN_KEY); } catch { return true; }
+    })();
+
+    const t = window.setTimeout(isFreshSession ? showNow : trigger, 800);
+
+    // Force show on every login (also fires SIGNED_IN after logout → login again)
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN") {
+        window.setTimeout(showNow, 600);
+      } else if (event === "SIGNED_OUT") {
+        // Clear throttle so next login definitely shows the popup
+        try {
+          localStorage.removeItem(LAST_SHOWN_KEY);
+          sessionStorage.removeItem(SESSION_SHOWN_KEY);
+        } catch { /* ignore */ }
+      }
+    });
 
     // Re-show when user comes back to the tab after being away
     const onVisibility = () => {
@@ -42,6 +67,7 @@ export function TelegramJoinPopup() {
       window.clearTimeout(t);
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
+      sub.subscription.unsubscribe();
     };
   }, []);
 

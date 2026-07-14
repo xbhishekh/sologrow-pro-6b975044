@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Send, ShieldAlert, X, ExternalLink } from "lucide-react";
+import { Send, Bell, X, ExternalLink } from "lucide-react";
 
 const TELEGRAM_URL = "https://telegram.me/organicsmmofficial";
 
@@ -59,29 +59,29 @@ export function TelegramJoinPopup() {
               </div>
 
               {/* Alert badge */}
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold tracking-[0.18em] uppercase bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-sm shadow-red-500/40 mb-3">
-                <ShieldAlert className="w-3 h-3" /> Security Alert
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold tracking-[0.18em] uppercase bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-sm shadow-sky-500/40 mb-3">
+                <Bell className="w-3 h-3" /> Stay Updated
               </span>
 
               <h3 className="text-xl sm:text-2xl font-extrabold text-white leading-tight tracking-tight mb-2">
-                Website Under Attack — Join Telegram
+                Join Our Official Telegram Channel
               </h3>
 
               <p className="text-sm text-slate-300/90 leading-relaxed mb-4">
-                Kuch log jal rahe hain aur website par continuously{" "}
-                <span className="font-semibold text-white">attacks</span> chal rahe
-                hain. Security badha di gayi hai lekin website{" "}
-                <span className="font-semibold text-white">kabhi bhi down</span> ho
-                sakti hai.
+                Our users have been earning really well with OrganicSMM, and because
+                of that a few competitors have been trying to{" "}
+                <span className="font-semibold text-white">attack the site</span>.
+                Nothing to worry about — everything is running{" "}
+                <span className="font-semibold text-white">safe and smooth</span>.
               </p>
 
               <div className="w-full rounded-2xl bg-white/5 ring-1 ring-white/10 p-3 mb-5 text-left">
                 <p className="text-[13px] text-slate-200 leading-relaxed">
-                  📢 Har update, downtime notice aur backup link paane ke liye{" "}
+                  📢 Just as a precaution, please join our{" "}
                   <span className="font-bold text-sky-300">
-                    hamara official Telegram channel
+                    official Telegram channel
                   </span>{" "}
-                  zaroor join karein.
+                  so you never miss any updates, offers, or important announcements.
                 </p>
               </div>
 

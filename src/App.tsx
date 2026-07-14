@@ -10,6 +10,7 @@ import { CurrencyProvider } from "@/hooks/useCurrency";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { toast } from "sonner";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
+import { TelegramJoinPopup } from "@/components/TelegramJoinPopup";
 
 
 // ALL pages eager-loaded for instantaneous navigation
@@ -97,7 +98,7 @@ const App = () => {
             <AppErrorBoundary>
               <BrowserRouter>
                 <ScrollToTop />
-                
+                <TelegramJoinPopup />
                   <Routes>
                     {/* User pages */}
                     <Route path="/" element={<Index />} />

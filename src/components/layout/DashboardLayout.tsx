@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar';
 import { MobileBottomNav } from './MobileBottomNav';
 import { WhatsAppFloatingButton } from '@/components/chat/WhatsAppFloatingButton';
 import { PopupAdDialog } from '@/components/PopupAdDialog';
+import { TelegramJoinPopup } from '@/components/TelegramJoinPopup';
 
 interface DashboardLayoutProps { children: ReactNode; }
 
@@ -29,6 +30,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </main>
       <WhatsAppFloatingButton />
       <PopupAdDialog />
+      <TelegramJoinPopup />
     </div>
   );
 }

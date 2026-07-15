@@ -1083,6 +1083,78 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       return true
     })
 
+    // ============================================================
+    // TYPE ORDERING: Views must go first, then likes/comments/shares/etc.
+    // Users complained that likes/comments show up before views on their
+    // posts. Enforce a strict order per engagement_order:
+    //   1. Views dispatch first.
+    //   2. Other engagement types are held back until the views item of
+    //      the same order has meaningfully started delivering.
+    // ============================================================
+    const TYPE_PRIORITY: Record<string, number> = {
+      views: 1,
+      view: 1,
+      plays: 1,
+      play: 1,
+      likes: 2,
+      like: 2,
+      comments: 3,
+      comment: 3,
+      shares: 4,
+      share: 4,
+      reposts: 5,
+      repost: 5,
+      saves: 6,
+      save: 6,
+      followers: 7,
+      subscribers: 7,
+    }
+    const priorityForType = (t?: string) => TYPE_PRIORITY[(t || '').toLowerCase().trim()] ?? 9
+    const VIEWS_GATE_RATIO = 0.10 // hold non-views until views item is 10% delivered
+
+    const orderIdsToInspect = Array.from(new Set(
+      (activeEngagementRuns || [])
+        .map((r: any) => r.engagement_order_item?.engagement_order?.id)
+        .filter((id: any) => !!id)
+    )) as string[]
+
+    const viewsProgressByOrder = new Map<string, { ratio: number; status: string; terminal: boolean }>()
+    if (orderIdsToInspect.length > 0) {
+      const { data: siblingItems } = await supabase
+        .from('engagement_order_items')
+        .select('engagement_order_id, engagement_type, status, delivered_count, quantity')
+        .in('engagement_order_id', orderIdsToInspect)
+      for (const it of (siblingItems || []) as any[]) {
+        if (priorityForType(it.engagement_type) !== 1) continue // only views-family
+        if (it.status === 'cancelled') continue
+        const qty = Number(it.quantity) || 0
+        const delivered = Number(it.delivered_count) || 0
+        const ratio = qty > 0 ? delivered / qty : 1
+        const terminal = ['completed', 'failed', 'partial'].includes(String(it.status || ''))
+        const prev = viewsProgressByOrder.get(it.engagement_order_id)
+        // If multiple views items exist, take the WORST (lowest ratio) as the gate
+        if (!prev || ratio < prev.ratio) {
+          viewsProgressByOrder.set(it.engagement_order_id, { ratio, status: it.status, terminal })
+        }
+      }
+    }
+
+    const passesViewsGate = (run: any) => {
+      const type = (run.engagement_order_item?.engagement_type || '').toLowerCase()
+      if (priorityForType(type) === 1) return true // views itself
+      const orderId = run.engagement_order_item?.engagement_order?.id
+      const vp = orderId ? viewsProgressByOrder.get(orderId) : null
+      if (!vp) return true // no views in this order — no gating
+      if (vp.terminal) return true
+      return vp.ratio >= VIEWS_GATE_RATIO
+    }
+
+    const gatedEngagementRuns = activeEngagementRuns.filter(passesViewsGate)
+    const heldByViewsGate = activeEngagementRuns.length - gatedEngagementRuns.length
+    if (heldByViewsGate > 0) {
+      console.log(`⏸️ Holding ${heldByViewsGate} non-views runs — waiting for views to reach ${Math.round(VIEWS_GATE_RATIO*100)}% delivery`)
+    }
+
     // Fairness: give each item's earliest due run a chance before taking more runs from the same item
     const itemRunCount = new Map<string, number>()
     const MAX_CONCURRENT_PER_ITEM = 1
@@ -1090,7 +1162,17 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     // Track link+type combos where ALL providers returned "active order" — only skip same type
     const activeOrderLinkTypes = new Set<string>()
 
-    const pendingRunsLimitedPerItem = activeEngagementRuns.filter((run: any) => {
+    // Sort by type priority BEFORE per-item cap so views win any tie for scheduling
+    const prioritizedPending = [...gatedEngagementRuns].sort((a: any, b: any) => {
+      const pa = priorityForType(a.engagement_order_item?.engagement_type)
+      const pb = priorityForType(b.engagement_order_item?.engagement_type)
+      if (pa !== pb) return pa - pb
+      const aTime = new Date(a.scheduled_at || 0).getTime()
+      const bTime = new Date(b.scheduled_at || 0).getTime()
+      return aTime - bTime
+    })
+
+    const pendingRunsLimitedPerItem = prioritizedPending.filter((run: any) => {
       const itemId = run.engagement_order_item_id
       const count = itemRunCount.get(itemId) || 0
       if (count < MAX_CONCURRENT_PER_ITEM) {
@@ -1118,7 +1200,14 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       return true
     })
 
-    const retryRunsLimitedPerItem = retryableFailedRuns.filter((run: any) => {
+    const gatedRetryRuns = retryableFailedRuns.filter(passesViewsGate)
+    const prioritizedRetry = [...gatedRetryRuns].sort((a: any, b: any) => {
+      const pa = priorityForType(a.engagement_order_item?.engagement_type)
+      const pb = priorityForType(b.engagement_order_item?.engagement_type)
+      if (pa !== pb) return pa - pb
+      return 0
+    })
+    const retryRunsLimitedPerItem = prioritizedRetry.filter((run: any) => {
       const itemId = run.engagement_order_item_id
       const count = itemRunCount.get(itemId) || 0
       if (count < MAX_CONCURRENT_PER_ITEM) {
@@ -1140,6 +1229,11 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       const aBusy = isDeprioritizedBusyRun(a) ? 1 : 0
       const bBusy = isDeprioritizedBusyRun(b) ? 1 : 0
       if (aBusy !== bBusy) return aBusy - bBusy
+
+      // Views always ahead of other types in the same batch
+      const pa = priorityForType(a.engagement_order_item?.engagement_type)
+      const pb = priorityForType(b.engagement_order_item?.engagement_type)
+      if (pa !== pb) return pa - pb
 
       const aTime = new Date(a.scheduled_at || 0).getTime()
       const bTime = new Date(b.scheduled_at || 0).getTime()

@@ -1466,6 +1466,7 @@ function ProviderMappingDialog({
                           onChange={(e) =>
                             handleMappingChange(account.id, 'serviceId', e.target.value)
                           }
+                          onFocus={(e) => e.currentTarget.select()}
                           placeholder="Service ID"
                           className="h-8 w-32 text-xs"
                           disabled={!mapping.checked}
@@ -1476,10 +1477,12 @@ function ProviderMappingDialog({
                           type="number"
                           min={1}
                           max={100}
+                          inputMode="numeric"
                           value={mapping.sortOrder}
                           onChange={(e) =>
                             handleMappingChange(account.id, 'sortOrder', parseInt(e.target.value) || 1)
                           }
+                          onFocus={(e) => e.currentTarget.select()}
                           className="h-8 w-14 text-xs"
                           disabled={!mapping.checked}
                         />

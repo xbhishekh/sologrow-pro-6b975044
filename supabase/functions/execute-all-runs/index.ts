@@ -1573,17 +1573,12 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       // until a mapping is configured (prevents accidental routing to a service's
       // legacy default provider_id).
       
-      const zeroDeliveryRetry = isRetry && isZeroDeliveryProviderFailure(run)
+      // STRICT ADMIN PRIORITY: always try providers in the exact sort_order
+      // configured in Admin → Service Provider Mapping. Priority 1 first,
+      // then 2, 3, ... — no re-sorting based on "recent completions" or
+      // "unhealthy names" so admin's ordering is fully respected.
       const accountsToTry: ProviderCandidate[] = [...availableAccounts]
-      accountsToTry.sort((a, b) => {
-        const aUnhealthy = zeroDeliveryRetry && providerNameLooksUnhealthy(a.account.name) ? 1 : 0
-        const bUnhealthy = zeroDeliveryRetry && providerNameLooksUnhealthy(b.account.name) ? 1 : 0
-        if (aUnhealthy !== bUnhealthy) return aUnhealthy - bUnhealthy
-        const aRecent = recentCompletedAccountIds.has(a.account.id) ? 1 : 0
-        const bRecent = recentCompletedAccountIds.has(b.account.id) ? 1 : 0
-        if (aRecent !== bRecent) return aRecent - bRecent
-        return (a.sortOrder || 999) - (b.sortOrder || 999)
-      })
+      accountsToTry.sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999))
       
       if (accountsToTry.length === 0) {
         if (mappingCache.hasConfiguredMappingForService(item.service.id)) {

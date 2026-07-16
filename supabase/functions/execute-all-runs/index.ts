@@ -967,14 +967,12 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     // ==========================================
     const nowWithBuffer = new Date(Date.now() + 2000).toISOString()
     const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-    const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
 
     const [
       { data: activeRuns },
       { data: globalStuckRuns },
       { data: pendingEngagementRuns, error: engagementRunsError },
       { data: failedEngagementRuns },
-      { data: recentlyBusyRuns },
     ] = await Promise.all([
       // 1. Active runs for conflict detection
       supabase
@@ -1008,12 +1006,6 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         .not('engagement_order_item_id', 'is', null)
         .order('completed_at', { ascending: true })
         .limit(50),
-      // 5. Recently busy runs (for cooldown)
-      supabase
-        .from('organic_run_schedule')
-        .select(`provider_account_id, error_message, engagement_order_item:engagement_order_items(engagement_type, engagement_order:engagement_orders(link))`)
-        .eq('status', 'pending')
-        .gte('last_status_check', fifteenMinAgo),
     ])
 
     // ==========================================

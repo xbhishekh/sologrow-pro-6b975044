@@ -1580,11 +1580,13 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       // pending runs of the same item so shares/saves do not get stuck forever.
       const originalQty = run.quantity_to_send
       let effectiveQty = originalQty
+      // Push providers whose min > qty to the end, but PRESERVE admin priority
+      // (sort_order) among the ones that fit. JS Array.sort is stable, so
+      // returning 0 for same-fit pairs keeps the earlier admin-priority order.
       accountsToTry.sort((a, b) => {
         const aFits = (a.minQuantity || 0) <= effectiveQty ? 0 : 1
         const bFits = (b.minQuantity || 0) <= effectiveQty ? 0 : 1
-        if (aFits !== bFits) return aFits - bFits
-        return (a.minQuantity || 0) - (b.minQuantity || 0)
+        return aFits - bFits
       })
       const smallestAccountMin = accountsToTry.reduce((min, entry) => {
         const candidateMin = Number(entry.minQuantity || 0)
@@ -1633,8 +1635,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           accountsToTry.sort((a, b) => {
             const aFits = (a.minQuantity || 0) <= effectiveQty ? 0 : 1
             const bFits = (b.minQuantity || 0) <= effectiveQty ? 0 : 1
-            if (aFits !== bFits) return aFits - bFits
-            return (a.minQuantity || 0) - (b.minQuantity || 0)
+            return aFits - bFits
           })
           console.log(`🧩 Run #${run.run_number} merged to ${combinedQty} for ${item.engagement_type} to satisfy provider min ${smallestAccountMin}`)
         } else {
@@ -1647,8 +1648,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           accountsToTry.sort((a, b) => {
             const aFits = (a.minQuantity || 0) <= effectiveQty ? 0 : 1
             const bFits = (b.minQuantity || 0) <= effectiveQty ? 0 : 1
-            if (aFits !== bFits) return aFits - bFits
-            return (a.minQuantity || 0) - (b.minQuantity || 0)
+            return aFits - bFits
           })
           console.log(`⬆️ Run #${run.run_number} boosted from ${originalQty} to provider min ${smallestAccountMin} (no future runs to merge)`)
         }

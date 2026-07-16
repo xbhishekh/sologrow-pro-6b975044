@@ -1110,50 +1110,9 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       subscribers: 7,
     }
     const priorityForType = (t?: string) => TYPE_PRIORITY[(t || '').toLowerCase().trim()] ?? 9
-    // Hold non-views until the views item has STARTED delivering.
-    // Using an absolute "delivered > 0" gate keeps the "views-first" ordering
-    // without stalling likes/shares for hours on big view orders (e.g. 26k views @ 10% = 2600).
-
-    const orderIdsToInspect = Array.from(new Set(
-      (activeEngagementRuns || [])
-        .map((r: any) => r.engagement_order_item?.engagement_order?.id)
-        .filter((id: any) => !!id)
-    )) as string[]
-
-    const viewsProgressByOrder = new Map<string, { delivered: number; status: string; terminal: boolean }>()
-    if (orderIdsToInspect.length > 0) {
-      const { data: siblingItems } = await supabase
-        .from('engagement_order_items')
-        .select('engagement_order_id, engagement_type, status, delivered_count, quantity')
-        .in('engagement_order_id', orderIdsToInspect)
-      for (const it of (siblingItems || []) as any[]) {
-        if (priorityForType(it.engagement_type) !== 1) continue // only views-family
-        if (it.status === 'cancelled') continue
-        const delivered = Number(it.delivered_count) || 0
-        const terminal = ['completed', 'failed', 'partial'].includes(String(it.status || ''))
-        const prev = viewsProgressByOrder.get(it.engagement_order_id)
-        // If multiple views items exist, take the WORST (lowest delivered) as the gate
-        if (!prev || delivered < prev.delivered) {
-          viewsProgressByOrder.set(it.engagement_order_id, { delivered, status: it.status, terminal })
-        }
-      }
-    }
-
-    const passesViewsGate = (run: any) => {
-      const type = (run.engagement_order_item?.engagement_type || '').toLowerCase()
-      if (priorityForType(type) === 1) return true // views itself
-      const orderId = run.engagement_order_item?.engagement_order?.id
-      const vp = orderId ? viewsProgressByOrder.get(orderId) : null
-      if (!vp) return true // no views in this order — no gating
-      if (vp.terminal) return true
-      return vp.delivered > 0
-    }
-
-    const gatedEngagementRuns = activeEngagementRuns.filter(passesViewsGate)
-    const heldByViewsGate = activeEngagementRuns.length - gatedEngagementRuns.length
-    if (heldByViewsGate > 0) {
-      console.log(`⏸️ Holding ${heldByViewsGate} non-views runs — waiting for views delivery to start`)
-    }
+    // Ordering only: views dispatch FIRST (priority sort), then likes/comments/shares/etc.
+    // No hard gate — organic look comes from priority sorting, not from blocking.
+    const gatedEngagementRuns = activeEngagementRuns
 
     // Fairness: give each item's earliest due run a chance before taking more runs from the same item
     const itemRunCount = new Map<string, number>()
@@ -1200,8 +1159,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       return true
     })
 
-    const gatedRetryRuns = retryableFailedRuns.filter(passesViewsGate)
-    const prioritizedRetry = [...gatedRetryRuns].sort((a: any, b: any) => {
+    const prioritizedRetry = [...retryableFailedRuns].sort((a: any, b: any) => {
       const pa = priorityForType(a.engagement_order_item?.engagement_type)
       const pb = priorityForType(b.engagement_order_item?.engagement_type)
       if (pa !== pb) return pa - pb

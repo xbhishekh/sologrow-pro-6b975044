@@ -9,7 +9,10 @@ const corsHeaders = {
 const MAX_RETRIES = 3
 const RETRY_DELAY_MS = 2000
 const MAX_RUN_RETRIES = 9999
-const ACTIVE_ORDER_RETRY_MS = 5 * 60 * 1000
+// Reduced from 5min → 60s: as soon as any provider finishes its active order
+// on this link, the next run can grab it. Also disables sibling batch-postpone
+// so each run gets its own chance every cron tick.
+const ACTIVE_ORDER_RETRY_MS = 60 * 1000
 const TEMPORARY_RETRY_MS = 60 * 1000
 
 // Inline status-check cache for this execution (avoids re-polling same account row).
@@ -2097,19 +2100,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         }).eq('id', run.id)
         skipped++
 
-        // BATCH POSTPONE: If active order error, mark link+type and batch-postpone same-type runs for this link
-        if (isActiveOrderError && sameLink) {
-          const linkTypeKey = `${sameLink}|${currentTypeNormalized}`
-          activeOrderLinkTypes.add(linkTypeKey)
-          const batchCount = await batchPostponeEngagementRunsForLink(
-            supabase,
-            sameLink,
-            currentTypeNormalized,
-            newScheduledAt,
-            `[Batch postponed] Active order on link for ${currentTypeNormalized}`,
-          )
-          console.log(`⏳ Link+type batch-postponed ${postponeMs / 60000}min: ${batchCount} matching ${currentTypeNormalized} runs (active order)`)
-        }
+        // NOTE: Batch-postponing siblings was removed — each run should get its
+        // own chance on every cron tick. If all providers are truly busy for
+        // this link+type, that run is postponed individually above and the
+        // next tick will re-evaluate provider availability.
         results.push({ run_id: run.id, type: item.engagement_type, run_number: run.run_number, 
           success: false, error: lastError, will_retry: true, retry_attempt: retryCount, postponed_min: postponeMs / 60000 })
       }

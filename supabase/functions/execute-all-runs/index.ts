@@ -1518,9 +1518,16 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       // ==========================================
       // OPTIMIZED: Use cached mapping lookup
       // ==========================================
-      const availableAccounts = await mappingCache.getForService(
+      let availableAccounts = await mappingCache.getForService(
         supabase, item.service.id, busyAccountIds, executionId
       )
+      if (availableAccounts.length === 0 && mappingCache.hasConfiguredMappingForService(item.service.id) && busyAccountIds.length > 0) {
+        const allMappedAccounts = await mappingCache.getForService(supabase, item.service.id, [], executionId)
+        if (allMappedAccounts.length > 0) {
+          availableAccounts = allMappedAccounts
+          console.log(`🔓 Run #${run.run_number}: bypassing stale busy pre-filter; trying all ${allMappedAccounts.length} mapped providers by priority`)
+        }
+      }
       
       // STRICT MAPPING MODE — no automatic default-provider fallback.
       // Only providers explicitly mapped via service_provider_mapping for this

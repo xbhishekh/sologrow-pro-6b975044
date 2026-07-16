@@ -1788,6 +1788,8 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           const conflictingRun = (priorRuns || []).find((pr: any) => {
             if (pr.id === run.id) return false
             if (pr.provider_account_id !== selectedAccount.id) return false
+            const localStatus = (pr.status || '').toLowerCase().trim()
+            if (['completed', 'failed', 'cancelled', 'canceled', 'partial'].includes(localStatus)) return false
             const prLink = normalizeLink(getNestedEngagementOrderLink(pr.engagement_order_item))
             const prType = (pr.engagement_order_item?.engagement_type || '').toLowerCase().trim()
             if (prLink !== sameLink || prType !== currentTypeNormalized) return false

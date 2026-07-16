@@ -9,7 +9,10 @@ const corsHeaders = {
 const MAX_RETRIES = 3
 const RETRY_DELAY_MS = 2000
 const MAX_RUN_RETRIES = 9999
-const ACTIVE_ORDER_RETRY_MS = 5 * 60 * 1000
+// Reduced from 5min → 60s: as soon as any provider finishes its active order
+// on this link, the next run can grab it. Also disables sibling batch-postpone
+// so each run gets its own chance every cron tick.
+const ACTIVE_ORDER_RETRY_MS = 60 * 1000
 const TEMPORARY_RETRY_MS = 60 * 1000
 
 // Inline status-check cache for this execution (avoids re-polling same account row).

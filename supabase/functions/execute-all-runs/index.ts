@@ -1430,13 +1430,12 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         }
       }
 
-      // FALLBACK: Exclude every provider already attempted for this run
-      // (tracked in provider_response.tried_providers by check-order-status).
-      const triedProviders: string[] = Array.isArray(run.provider_response?.tried_providers)
-        ? run.provider_response.tried_providers : []
-      for (const tp of triedProviders) {
-        if (tp && !busyAccountIds.includes(tp)) busyAccountIds.push(tp)
-      }
+      // Do NOT permanently exclude provider_response.tried_providers on the next
+      // cron tick. Those IDs are only a diagnostic trail from a previous attempt.
+      // Treating them as a blacklist makes a run permanently stuck after one
+      // round of temporary provider errors like "service inactive/not found".
+      // Real unsafe repeats are still blocked below by active same-link orders
+      // and by prior cancelled/refunded provider history.
 
       // FALLBACK: Also exclude any provider_account_id that already failed/cancelled
       // for this SAME engagement_order_item (prevents same-provider repeat across retries).

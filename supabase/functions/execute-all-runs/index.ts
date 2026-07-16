@@ -1724,16 +1724,19 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           })
           console.log(`🧩 Run #${run.run_number} merged to ${combinedQty} for ${item.engagement_type} to satisfy provider min ${smallestAccountMin}`)
         } else {
-          const postponeUntil = new Date(Date.now() + ACTIVE_ORDER_RETRY_MS).toISOString()
-          await supabase.from('organic_run_schedule').update({
-            status: 'pending',
-            scheduled_at: postponeUntil,
-            error_message: `[Waiting for merge] Scheduled ${originalQty} below provider min ${smallestAccountMin}`,
-            last_status_check: new Date().toISOString(),
-          }).eq('id', run.id)
-          skipped++
-          console.log(`⏳ Run #${run.run_number} postponed: ${originalQty} below provider min ${smallestAccountMin} and no mergeable future runs yet`)
-          continue
+          // No future runs available to merge — boost to provider minimum to unblock.
+          // Small over-delivery (a few extra likes/shares) is acceptable vs. stuck forever.
+          effectiveQty = smallestAccountMin
+          quantityToSend = smallestAccountMin
+          run.quantity_to_send = smallestAccountMin
+          run.base_quantity = smallestAccountMin
+          accountsToTry.sort((a, b) => {
+            const aFits = (a.minQuantity || 0) <= effectiveQty ? 0 : 1
+            const bFits = (b.minQuantity || 0) <= effectiveQty ? 0 : 1
+            if (aFits !== bFits) return aFits - bFits
+            return (a.minQuantity || 0) - (b.minQuantity || 0)
+          })
+          console.log(`⬆️ Run #${run.run_number} boosted from ${originalQty} to provider min ${smallestAccountMin} (no future runs to merge)`)
         }
       }
 

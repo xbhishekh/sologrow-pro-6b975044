@@ -2100,19 +2100,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         }).eq('id', run.id)
         skipped++
 
-        // BATCH POSTPONE: If active order error, mark link+type and batch-postpone same-type runs for this link
-        if (isActiveOrderError && sameLink) {
-          const linkTypeKey = `${sameLink}|${currentTypeNormalized}`
-          activeOrderLinkTypes.add(linkTypeKey)
-          const batchCount = await batchPostponeEngagementRunsForLink(
-            supabase,
-            sameLink,
-            currentTypeNormalized,
-            newScheduledAt,
-            `[Batch postponed] Active order on link for ${currentTypeNormalized}`,
-          )
-          console.log(`⏳ Link+type batch-postponed ${postponeMs / 60000}min: ${batchCount} matching ${currentTypeNormalized} runs (active order)`)
-        }
+        // NOTE: Batch-postponing siblings was removed — each run should get its
+        // own chance on every cron tick. If all providers are truly busy for
+        // this link+type, that run is postponed individually above and the
+        // next tick will re-evaluate provider availability.
         results.push({ run_id: run.id, type: item.engagement_type, run_number: run.run_number, 
           success: false, error: lastError, will_retry: true, retry_attempt: retryCount, postponed_min: postponeMs / 60000 })
       }

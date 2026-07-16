@@ -1110,7 +1110,9 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       subscribers: 7,
     }
     const priorityForType = (t?: string) => TYPE_PRIORITY[(t || '').toLowerCase().trim()] ?? 9
-    const VIEWS_GATE_RATIO = 0.10 // hold non-views until views item is 10% delivered
+    // Hold non-views until the views item has STARTED delivering.
+    // Using an absolute "delivered > 0" gate keeps the "views-first" ordering
+    // without stalling likes/shares for hours on big view orders (e.g. 26k views @ 10% = 2600).
 
     const orderIdsToInspect = Array.from(new Set(
       (activeEngagementRuns || [])
@@ -1118,7 +1120,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         .filter((id: any) => !!id)
     )) as string[]
 
-    const viewsProgressByOrder = new Map<string, { ratio: number; status: string; terminal: boolean }>()
+    const viewsProgressByOrder = new Map<string, { delivered: number; status: string; terminal: boolean }>()
     if (orderIdsToInspect.length > 0) {
       const { data: siblingItems } = await supabase
         .from('engagement_order_items')
@@ -1127,14 +1129,12 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       for (const it of (siblingItems || []) as any[]) {
         if (priorityForType(it.engagement_type) !== 1) continue // only views-family
         if (it.status === 'cancelled') continue
-        const qty = Number(it.quantity) || 0
         const delivered = Number(it.delivered_count) || 0
-        const ratio = qty > 0 ? delivered / qty : 1
         const terminal = ['completed', 'failed', 'partial'].includes(String(it.status || ''))
         const prev = viewsProgressByOrder.get(it.engagement_order_id)
-        // If multiple views items exist, take the WORST (lowest ratio) as the gate
-        if (!prev || ratio < prev.ratio) {
-          viewsProgressByOrder.set(it.engagement_order_id, { ratio, status: it.status, terminal })
+        // If multiple views items exist, take the WORST (lowest delivered) as the gate
+        if (!prev || delivered < prev.delivered) {
+          viewsProgressByOrder.set(it.engagement_order_id, { delivered, status: it.status, terminal })
         }
       }
     }
@@ -1146,13 +1146,13 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       const vp = orderId ? viewsProgressByOrder.get(orderId) : null
       if (!vp) return true // no views in this order — no gating
       if (vp.terminal) return true
-      return vp.ratio >= VIEWS_GATE_RATIO
+      return vp.delivered > 0
     }
 
     const gatedEngagementRuns = activeEngagementRuns.filter(passesViewsGate)
     const heldByViewsGate = activeEngagementRuns.length - gatedEngagementRuns.length
     if (heldByViewsGate > 0) {
-      console.log(`⏸️ Holding ${heldByViewsGate} non-views runs — waiting for views to reach ${Math.round(VIEWS_GATE_RATIO*100)}% delivery`)
+      console.log(`⏸️ Holding ${heldByViewsGate} non-views runs — waiting for views delivery to start`)
     }
 
     // Fairness: give each item's earliest due run a chance before taking more runs from the same item

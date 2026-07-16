@@ -967,14 +967,12 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     // ==========================================
     const nowWithBuffer = new Date(Date.now() + 2000).toISOString()
     const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-    const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
 
     const [
       { data: activeRuns },
       { data: globalStuckRuns },
       { data: pendingEngagementRuns, error: engagementRunsError },
       { data: failedEngagementRuns },
-      { data: recentlyBusyRuns },
     ] = await Promise.all([
       // 1. Active runs for conflict detection
       supabase
@@ -1008,12 +1006,6 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         .not('engagement_order_item_id', 'is', null)
         .order('completed_at', { ascending: true })
         .limit(50),
-      // 5. Recently busy runs (for cooldown)
-      supabase
-        .from('organic_run_schedule')
-        .select(`provider_account_id, error_message, engagement_order_item:engagement_order_items(engagement_type, engagement_order:engagement_orders(link))`)
-        .eq('status', 'pending')
-        .gte('last_status_check', fifteenMinAgo),
     ])
 
     // ==========================================
@@ -1202,20 +1194,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     })
     console.log(`Processing ${allEngagementRuns.length} runs (${pendingRunsLimitedPerItem.length} pending + ${retryRunsLimitedPerItem.length} retry), total overdue in DB: check query`)
 
-    // PRE-BUILD busy account lookup for recently busy runs (link → Set<accountId>)
-    const recentlyBusyByLinkType = new Map<string, Set<string>>()
-    if (recentlyBusyRuns && recentlyBusyRuns.length > 0) {
-      for (const rbr of recentlyBusyRuns) {
-        if (!rbr.provider_account_id) continue
-        if (isActiveOrderErrorMsg(rbr.error_message)) {
-          const rbrLink = normalizeLink(getNestedEngagementOrderLink(rbr.engagement_order_item))
-          const rbrType = (rbr.engagement_order_item?.engagement_type || '').toLowerCase().trim()
-          const busyKey = `${rbrLink}|${rbrType}`
-          if (!recentlyBusyByLinkType.has(busyKey)) recentlyBusyByLinkType.set(busyKey, new Set())
-          recentlyBusyByLinkType.get(busyKey)!.add(rbr.provider_account_id)
-        }
-      }
-    }
+    // Do not pre-block queued runs from old "active order" errors.
+    // A queued run must reach the provider attempt loop every cron tick; only
+    // live/started provider orders and the provider's fresh API response should
+    // decide whether that provider is busy.
 
     // Process each engagement run
     for (const run of allEngagementRuns) {
@@ -1416,13 +1398,8 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         if (!busyAccountIds.includes(usedId)) busyAccountIds.push(usedId)
       }
       
-      // From pre-fetched recently busy runs
-      const busyForLinkType = recentlyBusyByLinkType.get(localExecutionKey)
-      if (busyForLinkType) {
-        for (const accId of busyForLinkType) {
-          if (!busyAccountIds.includes(accId)) busyAccountIds.push(accId)
-        }
-      }
+      // Do not add old recently-busy providers here; queued runs should still
+      // be sent through the provider rotation and get a fresh response.
 
       // FALLBACK: If this run already failed/cancelled on a provider, exclude it on retry
       // so the system tries a backup provider instead of repeating the same one.
@@ -1440,36 +1417,11 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       // Real unsafe repeats are still blocked below by active same-link orders
       // and by prior cancelled/refunded provider history.
 
-      // FALLBACK: Also exclude any provider_account_id that already failed/cancelled
-      // for this SAME engagement_order_item (prevents same-provider repeat across retries).
-      try {
-        const { data: priorFailedForItem } = await supabase
-          .from('organic_run_schedule')
-          .select('id, provider_account_id, error_message, provider_status, status')
-          .eq('engagement_order_item_id', item.id)
-          .in('status', ['failed', 'cancelled'])
-          .not('provider_account_id', 'is', null)
-          .limit(200)
-        if (priorFailedForItem) {
-          for (const pr of priorFailedForItem as any[]) {
-            // Exclude only providers that CANCELLED/REFUNDED previously on this item.
-            // Successful providers (priority #1) can keep handling future runs.
-            const ps = (pr.provider_status || '').toLowerCase()
-            const em = (pr.error_message || '').toLowerCase()
-            const wasCancelled =
-              ps.includes('cancel') || ps.includes('refund') ||
-              em.includes('cancel') || em.includes('refund')
-            if (wasCancelled && pr.id !== run.id && pr.provider_account_id && !busyAccountIds.includes(pr.provider_account_id)) {
-              busyAccountIds.push(pr.provider_account_id)
-            }
-          }
-        }
-      } catch (_e) { /* non-fatal */ }
-
-      // IMPORTANT: Do not block a provider for this item just because a different
-      // engagement type in the same order had a cancelled/refunded run earlier.
-      // Shares/Saves often have only one mapped provider, and cross-type exclusions
-      // can incorrectly leave zero accounts to try, causing endless postpones.
+      // IMPORTANT: Do not permanently block a mapped provider because an older
+      // sibling run was cancelled/refunded. The user expects queued runs to go
+      // through the full admin-priority provider rotation. Same-run retries still
+      // skip the just-failed provider above, and live active-order checks below
+      // prevent duplicate active orders on the same provider.
       
       // From active (started) runs for same link+type
       const startedRunsForLink = (activeRuns || []).filter((r: any) => {
@@ -1566,9 +1518,16 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       // ==========================================
       // OPTIMIZED: Use cached mapping lookup
       // ==========================================
-      const availableAccounts = await mappingCache.getForService(
+      let availableAccounts = await mappingCache.getForService(
         supabase, item.service.id, busyAccountIds, executionId
       )
+      if (availableAccounts.length === 0 && mappingCache.hasConfiguredMappingForService(item.service.id) && busyAccountIds.length > 0) {
+        const allMappedAccounts = await mappingCache.getForService(supabase, item.service.id, [], executionId)
+        if (allMappedAccounts.length > 0) {
+          availableAccounts = allMappedAccounts
+          console.log(`🔓 Run #${run.run_number}: bypassing stale busy pre-filter; trying all ${allMappedAccounts.length} mapped providers by priority`)
+        }
+      }
       
       // STRICT MAPPING MODE — no automatic default-provider fallback.
       // Only providers explicitly mapped via service_provider_mapping for this

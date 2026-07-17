@@ -370,9 +370,21 @@ serve(async (req) => {
       if (bundle) aiOrganicEnabled = bundle.ai_organic_enabled ?? true
     }
 
+    // Preserve user-selected variance & peak setting on the order so the
+    // Order Details page shows the SAME value user picked before placing.
+    // Use the max across engagements so users setting 50% on any type see 50%.
+    const orderVariancePercent = Math.max(
+      0,
+      ...engagements.map((e: any) => Number(e.variance_percent) || 0),
+      0
+    ) || null
+    const orderPeakHoursEnabled = engagements.some((e: any) => e.peak_hours_enabled === true)
+
     // Create order
     const { data: order, error: orderError } = await supabase.from('engagement_orders').insert({
-      user_id, bundle_id, link, total_price: safeTotalPrice, base_quantity, is_organic_mode: true, status: 'processing'
+      user_id, bundle_id, link, total_price: safeTotalPrice, base_quantity, is_organic_mode: true, status: 'processing',
+      ...(orderVariancePercent !== null ? { variance_percent: orderVariancePercent } : {}),
+      peak_hours_enabled: orderPeakHoursEnabled,
     }).select().single()
 
     if (orderError || !order) return new Response(JSON.stringify({ error: `Failed to create order: ${orderError?.message || 'Unknown error'}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })

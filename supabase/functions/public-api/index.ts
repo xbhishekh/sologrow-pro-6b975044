@@ -147,21 +147,22 @@ serve(async (req) => {
                     return err(`Insufficient balance. Need $${totalPrice.toFixed(4)}, have $${wallet.balance.toFixed(4)}`)
                 }
 
-                const duplicateWindowStart = new Date(Date.now() - 2 * 60 * 1000).toISOString()
-                const { data: recentDuplicateOrder } = await supabase
+                // Block if user already has an unfinished order for the same
+                // service + same link (any quantity). Prevents reseller scripts
+                // from stacking dozens of duplicate orders on one video.
+                const { data: existingUnfinished } = await supabase
                     .from('orders')
                     .select('id, order_number, status, created_at')
                     .eq('user_id', userId)
                     .eq('service_id', svc.id)
                     .eq('link', link)
-                    .eq('quantity', qty)
-                    .gte('created_at', duplicateWindowStart)
+                    .in('status', ['pending', 'processing'])
                     .order('created_at', { ascending: false })
                     .limit(1)
                     .maybeSingle()
 
-                if (recentDuplicateOrder) {
-                    return json({ order: recentDuplicateOrder.order_number, duplicate_blocked: true })
+                if (existingUnfinished) {
+                    return err(`Duplicate blocked: order #${existingUnfinished.order_number} for this link is still ${existingUnfinished.status}. Wait for it to finish before placing another for the same service.`, 409)
                 }
 
                 const { data: order, error: oErr } = await supabase

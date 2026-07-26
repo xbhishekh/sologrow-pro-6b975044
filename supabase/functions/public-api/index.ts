@@ -147,22 +147,30 @@ serve(async (req) => {
                     return err(`Insufficient balance. Need $${totalPrice.toFixed(4)}, have $${wallet.balance.toFixed(4)}`)
                 }
 
-                // Block if user already has an unfinished order for the same
-                // service + same link (any quantity). Prevents reseller scripts
-                // from stacking dozens of duplicate orders on one video.
-                const { data: existingUnfinished } = await supabase
+                // Concurrency cap: max unfinished orders per user+service+link
+                // equals the number of ACTIVE provider accounts mapped to the
+                // service (fallback 1). One provider = one active order per link.
+                const { count: activeProviderCount } = await supabase
+                    .from('service_provider_mapping')
+                    .select('id, provider_account:provider_accounts!inner(is_active)', { count: 'exact', head: true })
+                    .eq('service_id', svc.id)
+                    .eq('is_active', true)
+                    .eq('provider_account.is_active', true)
+
+                const maxConcurrent = Math.max(1, activeProviderCount || 0)
+
+                const { data: existingUnfinished, count: unfinishedCount } = await supabase
                     .from('orders')
-                    .select('id, order_number, status, created_at')
+                    .select('id, order_number, status', { count: 'exact' })
                     .eq('user_id', userId)
                     .eq('service_id', svc.id)
                     .eq('link', link)
                     .in('status', ['pending', 'processing'])
                     .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle()
 
-                if (existingUnfinished) {
-                    return err(`Duplicate blocked: order #${existingUnfinished.order_number} for this link is still ${existingUnfinished.status}. Wait for it to finish before placing another for the same service.`, 409)
+                if ((unfinishedCount || 0) >= maxConcurrent) {
+                    const latest = existingUnfinished?.[0]
+                    return err(`Concurrency limit reached: ${unfinishedCount} order(s) already in-progress for this link. Max allowed = ${maxConcurrent} (one per active provider). Latest: #${latest?.order_number} (${latest?.status}). Wait for one to finish.`, 409)
                 }
 
                 const { data: order, error: oErr } = await supabase

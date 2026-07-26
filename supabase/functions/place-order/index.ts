@@ -137,28 +137,37 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Duplicate guard: block if the user already has an unfinished order
-    // (pending or processing) for the SAME service + SAME link — regardless
-    // of quantity. Prevents accidental / scripted spam onto the same video.
-    const { data: existingUnfinished } = await supabaseAdmin
+    // Concurrency guard: allow at most N concurrent unfinished orders per
+    // user + service + link, where N = number of ACTIVE provider accounts
+    // mapped to this service (fallback 1 if no mappings). One provider can
+    // only handle one order per link at a time, so this matches real capacity.
+    const { count: activeProviderCount } = await supabaseAdmin
+      .from("service_provider_mapping")
+      .select("id, provider_account:provider_accounts!inner(is_active)", { count: "exact", head: true })
+      .eq("service_id", orderInsertData.service_id)
+      .eq("is_active", true)
+      .eq("provider_account.is_active", true);
+
+    const maxConcurrent = Math.max(1, activeProviderCount || 0);
+
+    const { data: existingUnfinished, count: unfinishedCount } = await supabaseAdmin
       .from("orders")
-      .select("id, order_number, status, created_at")
+      .select("id, order_number, status, created_at", { count: "exact" })
       .eq("user_id", user.id)
       .eq("service_id", orderInsertData.service_id)
       .eq("link", orderInsertData.link)
       .in("status", ["pending", "processing"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: false });
 
-    if (existingUnfinished) {
+    if ((unfinishedCount || 0) >= maxConcurrent) {
+      const latest = existingUnfinished?.[0];
       return new Response(JSON.stringify({
         success: true,
         duplicate_blocked: true,
-        order_id: existingUnfinished.id,
-        order_number: existingUnfinished.order_number,
-        status: existingUnfinished.status,
-        message: "You already have an in-progress order for this link with the same service. Wait for it to complete before placing another.",
+        order_id: latest?.id,
+        order_number: latest?.order_number,
+        status: latest?.status,
+        message: `You already have ${unfinishedCount} in-progress order(s) for this link. This service allows max ${maxConcurrent} concurrent order(s) (one per available provider). Wait for one to finish.`,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

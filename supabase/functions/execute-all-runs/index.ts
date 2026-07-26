@@ -949,6 +949,37 @@ serve(async (req) => {
 
 async function processAllRuns(supabase: any, executionId: string, startTime: number) {
   try {
+    // ==========================================
+    // SWEEP: retry stuck pending non-organic orders
+    // (place-order/public-api invoke process-order fire-and-forget; if that
+    //  invoke drops, the order sits at pending forever. Cron picks it up.)
+    // ==========================================
+    try {
+      const staleCutoff = new Date(Date.now() - 60 * 1000).toISOString()
+      const { data: stalePending } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('status', 'pending')
+        .eq('is_organic_mode', false)
+        .is('provider_order_id', null)
+        .lt('created_at', staleCutoff)
+        .order('created_at', { ascending: true })
+        .limit(30)
+
+      if (stalePending && stalePending.length > 0) {
+        console.log(`[sweep] Retrying ${stalePending.length} stuck pending non-organic orders`)
+        for (const p of stalePending) {
+          try {
+            await supabase.functions.invoke('process-order', { body: { order_id: p.id } })
+          } catch (e) {
+            console.log(`[sweep] invoke failed for ${p.id}: ${(e as Error).message}`)
+          }
+        }
+      }
+    } catch (sweepErr) {
+      console.log(`[sweep] error: ${(sweepErr as Error).message}`)
+    }
+
     let processed = 0
     let skipped = 0
     let failed = 0

@@ -137,27 +137,28 @@ Deno.serve(async (req) => {
       });
     }
 
-    const duplicateWindowStart = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-    const { data: recentDuplicateOrder } = await supabaseAdmin
+    // Duplicate guard: block if the user already has an unfinished order
+    // (pending or processing) for the SAME service + SAME link — regardless
+    // of quantity. Prevents accidental / scripted spam onto the same video.
+    const { data: existingUnfinished } = await supabaseAdmin
       .from("orders")
       .select("id, order_number, status, created_at")
       .eq("user_id", user.id)
       .eq("service_id", orderInsertData.service_id)
       .eq("link", orderInsertData.link)
-      .eq("quantity", orderInsertData.quantity)
-      .gte("created_at", duplicateWindowStart)
+      .in("status", ["pending", "processing"])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (recentDuplicateOrder) {
+    if (existingUnfinished) {
       return new Response(JSON.stringify({
         success: true,
         duplicate_blocked: true,
-        order_id: recentDuplicateOrder.id,
-        order_number: recentDuplicateOrder.order_number,
-        status: recentDuplicateOrder.status,
-        message: "A similar order was just created, so a duplicate request was blocked.",
+        order_id: existingUnfinished.id,
+        order_number: existingUnfinished.order_number,
+        status: existingUnfinished.status,
+        message: "You already have an in-progress order for this link with the same service. Wait for it to complete before placing another.",
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

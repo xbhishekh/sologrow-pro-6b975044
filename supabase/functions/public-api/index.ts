@@ -11,6 +11,19 @@ const supabase = createClient(
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 )
 
+const canonicalLink = (value?: string | null) => {
+    const raw = (value || '').trim()
+    if (!raw) return ''
+    try {
+        const url = new URL(raw)
+        url.hash = ''
+        url.search = ''
+        return `${url.origin}${url.pathname}`.toLowerCase().replace(/\/+$/, '')
+    } catch {
+        return raw.toLowerCase().replace(/[?#].*$/, '').replace(/\/+$/, '')
+    }
+}
+
 // ─── Parse body: JSON OR form-encoded ───────────────────────────────────────
 async function parseBody(req: Request): Promise<Record<string, string>> {
     const ct = req.headers.get('content-type') || ''
@@ -147,30 +160,25 @@ serve(async (req) => {
                     return err(`Insufficient balance. Need $${totalPrice.toFixed(4)}, have $${wallet.balance.toFixed(4)}`)
                 }
 
-                // Concurrency cap: max unfinished orders per user+service+link
-                // equals the number of ACTIVE provider accounts mapped to the
-                // service (fallback 1). One provider = one active order per link.
-                const { count: activeProviderCount } = await supabase
-                    .from('service_provider_mapping')
-                    .select('id, provider_account:provider_accounts!inner(is_active)', { count: 'exact', head: true })
-                    .eq('service_id', svc.id)
-                    .eq('is_active', true)
-                    .eq('provider_account.is_active', true)
-
-                const maxConcurrent = Math.max(1, activeProviderCount || 0)
-
-                const { data: existingUnfinished, count: unfinishedCount } = await supabase
+                // Loss guard: only ONE unfinished order is allowed per user +
+                // service + canonical video link. Provider rotation is backup
+                // routing only, not parallel duplicate selling.
+                const incomingCanonicalLink = canonicalLink(link)
+                const { data: existingUnfinished } = await supabase
                     .from('orders')
-                    .select('id, order_number, status', { count: 'exact' })
+                    .select('id, order_number, status, link')
                     .eq('user_id', userId)
                     .eq('service_id', svc.id)
-                    .eq('link', link)
                     .in('status', ['pending', 'processing'])
                     .order('created_at', { ascending: false })
+                    .limit(100)
 
-                if ((unfinishedCount || 0) >= maxConcurrent) {
-                    const latest = existingUnfinished?.[0]
-                    return err(`Concurrency limit reached: ${unfinishedCount} order(s) already in-progress for this link. Max allowed = ${maxConcurrent} (one per active provider). Latest: #${latest?.order_number} (${latest?.status}). Wait for one to finish.`, 409)
+                const duplicateOrder = (existingUnfinished || []).find((existing: any) =>
+                    canonicalLink(existing.link) === incomingCanonicalLink
+                )
+
+                if (duplicateOrder) {
+                    return err(`Duplicate blocked: order #${duplicateOrder.order_number} is already in progress for this service and video. Please wait until it completes.`, 409)
                 }
 
                 const { data: order, error: oErr } = await supabase

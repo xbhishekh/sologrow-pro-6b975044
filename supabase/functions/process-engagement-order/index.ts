@@ -257,6 +257,19 @@ const supabaseModule = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 )
 
+const canonicalLink = (value?: string | null) => {
+  const raw = (value || '').trim()
+  if (!raw) return ''
+  try {
+    const url = new URL(raw)
+    url.hash = ''
+    url.search = ''
+    return `${url.origin}${url.pathname}`.toLowerCase().replace(/\/+$/, '')
+  } catch {
+    return raw.toLowerCase().replace(/[?#].*$/, '').replace(/\/+$/, '')
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -361,6 +374,34 @@ serve(async (req) => {
     const { data: walletPre } = await supabase.from('wallets').select('balance').eq('user_id', user_id).maybeSingle()
     if (!walletPre || walletPre.balance < safeTotalPrice) {
       return new Response(JSON.stringify({ error: 'Insufficient balance' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // Loss guard: block repeat organic/engagement orders for the same user +
+    // bundle + canonical video link while an older one is still open. Users
+    // should wait for the previous delivery instead of stacking duplicate jobs.
+    const incomingCanonicalLink = canonicalLink(link)
+    const { data: existingOpenOrders } = await supabase
+      .from('engagement_orders')
+      .select('id, order_number, status, link, created_at')
+      .eq('user_id', user_id)
+      .eq('bundle_id', bundle_id)
+      .in('status', ['pending', 'processing', 'partial'])
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    const duplicateOrder = (existingOpenOrders || []).find((existing: any) =>
+      canonicalLink(existing.link) === incomingCanonicalLink
+    )
+
+    if (duplicateOrder) {
+      return new Response(JSON.stringify({
+        success: true,
+        duplicate_blocked: true,
+        order_id: duplicateOrder.id,
+        order_number: duplicateOrder.order_number,
+        status: duplicateOrder.status,
+        error: `Duplicate blocked: order #${duplicateOrder.order_number} is already in progress for this bundle and video. Please wait until it completes.`,
+      }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     // Check if bundle has AI Organic Mode enabled (default ON)

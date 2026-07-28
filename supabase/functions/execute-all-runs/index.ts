@@ -1483,6 +1483,8 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         }
       }
       
+      let hasActiveSameLinkTypeDelivery = false
+
       if (startedRunsForLink && startedRunsForLink.length > 0) {
         for (let stuckRun of startedRunsForLink) {
           // INLINE STATUS REFRESH: don't trust stale DB status — re-poll provider live so we
@@ -1539,11 +1541,30 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
               continue
             }
             
+            if (stuckRun.provider_order_id) {
+              hasActiveSameLinkTypeDelivery = true
+            }
+
             if (!busyAccountIds.includes(stuckRun.provider_account_id)) {
               busyAccountIds.push(stuckRun.provider_account_id)
             }
           }
         }
+      }
+
+      if (hasActiveSameLinkTypeDelivery) {
+        const postponeMs = ACTIVE_ORDER_RETRY_MS
+        const newScheduledAt = new Date(Date.now() + postponeMs).toISOString()
+        await supabase.from('organic_run_schedule').update({
+          scheduled_at: newScheduledAt,
+          error_message: `[Loss guard] Same link+${currentTypeNormalized} already has an active provider order — waiting before sending next run`,
+          last_status_check: new Date().toISOString(),
+        }).eq('id', run.id)
+        skipped++
+        console.log(`🛑 Loss guard: Run #${run.run_number} postponed because same link+${currentTypeNormalized} already has active provider delivery`)
+        results.push({ run_id: run.id, run_number: run.run_number, type: item.engagement_type,
+          success: false, skipped: true, reason: 'Same link+type already active at provider' })
+        continue
       }
 
       // ==========================================

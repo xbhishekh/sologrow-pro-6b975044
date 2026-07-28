@@ -6,6 +6,19 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const canonicalLink = (value?: string | null) => {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    url.search = "";
+    return `${url.origin}${url.pathname}`.toLowerCase().replace(/\/+$/, "");
+  } catch {
+    return raw.toLowerCase().replace(/[?#].*$/, "").replace(/\/+$/, "");
+  }
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -137,37 +150,31 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Concurrency guard: allow at most N concurrent unfinished orders per
-    // user + service + link, where N = number of ACTIVE provider accounts
-    // mapped to this service (fallback 1 if no mappings). One provider can
-    // only handle one order per link at a time, so this matches real capacity.
-    const { count: activeProviderCount } = await supabaseAdmin
-      .from("service_provider_mapping")
-      .select("id, provider_account:provider_accounts!inner(is_active)", { count: "exact", head: true })
-      .eq("service_id", orderInsertData.service_id)
-      .eq("is_active", true)
-      .eq("provider_account.is_active", true);
-
-    const maxConcurrent = Math.max(1, activeProviderCount || 0);
-
-    const { data: existingUnfinished, count: unfinishedCount } = await supabaseAdmin
+    // Loss guard: only ONE unfinished order is allowed per user + service +
+    // canonical video link. Provider rotation is for retry/backup routing, not
+    // permission to sell the same video repeatedly while previous delivery is open.
+    const incomingCanonicalLink = canonicalLink(String(orderInsertData.link || ""));
+    const { data: existingUnfinished } = await supabaseAdmin
       .from("orders")
-      .select("id, order_number, status, created_at", { count: "exact" })
+      .select("id, order_number, status, link, created_at")
       .eq("user_id", user.id)
       .eq("service_id", orderInsertData.service_id)
-      .eq("link", orderInsertData.link)
       .in("status", ["pending", "processing"])
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
 
-    if ((unfinishedCount || 0) >= maxConcurrent) {
-      const latest = existingUnfinished?.[0];
+    const duplicateOrder = (existingUnfinished || []).find((existing: any) =>
+      canonicalLink(existing.link) === incomingCanonicalLink
+    );
+
+    if (duplicateOrder) {
       return new Response(JSON.stringify({
         success: true,
         duplicate_blocked: true,
-        order_id: latest?.id,
-        order_number: latest?.order_number,
-        status: latest?.status,
-        message: `You already have ${unfinishedCount} in-progress order(s) for this link. This service allows max ${maxConcurrent} concurrent order(s) (one per available provider). Wait for one to finish.`,
+        order_id: duplicateOrder.id,
+        order_number: duplicateOrder.order_number,
+        status: duplicateOrder.status,
+        message: `Duplicate blocked: order #${duplicateOrder.order_number} is already in progress for this service and video. Please wait until it completes.`,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

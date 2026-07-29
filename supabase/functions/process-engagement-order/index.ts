@@ -392,7 +392,7 @@ serve(async (req) => {
       .select('id, order_number, status, link, created_at')
       .eq('user_id', user_id)
       .eq('bundle_id', bundle_id)
-      .in('status', ['pending', 'processing', 'partial'])
+      .in('status', ['pending', 'processing'])
       .order('created_at', { ascending: false })
       .limit(100)
 

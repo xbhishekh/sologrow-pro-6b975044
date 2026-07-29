@@ -16,14 +16,13 @@ Deno.serve(async (req) => {
   try {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Verify admin OR service role
+    // Verify admin OR service role (anon key bypass removed for security)
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Not authenticated");
     const token = authHeader.replace("Bearer ", "");
-    
-    // Bypass for cron/system calls
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const isSystemCall = (token === serviceRoleKey) || (anonKey && token === anonKey);
+
+    // Only the service_role key counts as a system/cron call.
+    const isSystemCall = token === serviceRoleKey;
 
     if (!isSystemCall) {
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);

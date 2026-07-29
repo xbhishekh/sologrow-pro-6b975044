@@ -14,6 +14,28 @@ Deno.serve(async (req) => {
   const url = new URL(req.url)
   if (req.method === 'GET' && (url.searchParams.get('health') === '1' || url.pathname.endsWith('/health'))) {
     const canonicalUrl = `${SUPABASE_URL}/functions/v1/zapupi-webhook`
+    // Require service_role or admin auth to view health details (was previously public).
+    const authHeader = req.headers.get('authorization') || ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+    let authorized = token === SERVICE_ROLE
+    if (!authorized && token) {
+      try {
+        const admin0 = createClient(SUPABASE_URL, SERVICE_ROLE)
+        const { data: userData } = await admin0.auth.getUser(token)
+        if (userData?.user) {
+          const { data: roleRow } = await admin0
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', userData.user.id)
+            .eq('role', 'admin')
+            .maybeSingle()
+          if (roleRow) authorized = true
+        }
+      } catch { /* ignore */ }
+    }
+    if (!authorized) {
+      return json({ ok: false, error: 'Unauthorized' }, 401)
+    }
     try {
       const admin = createClient(SUPABASE_URL, SERVICE_ROLE)
       const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()

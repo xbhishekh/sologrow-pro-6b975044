@@ -12,8 +12,18 @@ const canonicalLink = (value?: string | null) => {
   try {
     const url = new URL(raw);
     url.hash = "";
-    url.search = "";
-    return `${url.origin}${url.pathname}`.toLowerCase().replace(/\/+$/, "");
+    // Preserve identifying query params for hosts that put the resource id in the query string
+    // (e.g. YouTube watch URLs: https://www.youtube.com/watch?v=VIDEO_ID). Otherwise
+    // different videos collapse to the same canonical value and get treated as duplicates.
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const isYouTubeWatch = (host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com")
+      && url.pathname.replace(/\/+$/, "") === "/watch";
+    let keptSearch = "";
+    if (isYouTubeWatch) {
+      const v = url.searchParams.get("v");
+      if (v) keptSearch = `?v=${v}`;
+    }
+    return `${url.origin}${url.pathname}${keptSearch}`.toLowerCase().replace(/([^?])\/+$/, "$1");
   } catch {
     return raw.toLowerCase().replace(/[?#].*$/, "").replace(/\/+$/, "");
   }

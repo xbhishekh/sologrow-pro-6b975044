@@ -704,10 +704,11 @@ export default function EngagementOrderDetail() {
   const liveDelivered = stats?.totalDelivered ?? 0;
   const hasPending = (stats?.pendingRuns?.length ?? 0) > 0;
   const hasActive = (stats?.startedRuns?.length ?? 0) > 0;
+  const terminalStatuses = new Set(['completed', 'partial', 'cancelled', 'failed']);
   let effectiveStatus = order.status as string;
   if (totalOriginalQuantity > 0 && liveDelivered >= totalOriginalQuantity) {
     effectiveStatus = 'completed';
-  } else if (effectiveStatus !== 'cancelled' && effectiveStatus !== 'failed' && effectiveStatus !== 'paused') {
+  } else if (!terminalStatuses.has(effectiveStatus) && effectiveStatus !== 'paused') {
     if (hasActive || hasPending || liveDelivered > 0) {
       effectiveStatus = 'processing';
     }

@@ -52,6 +52,11 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  // Wall-clock deadline to guarantee we return a definitive response before the
+  // 60s Edge Function timeout produces a 504 at the gateway.
+  const REQUEST_DEADLINE_MS = Date.now() + 45_000
+  const remainingMs = () => REQUEST_DEADLINE_MS - Date.now()
+
   try {
     let isServiceRole = false;
     let callerUserId: string | null = null;
@@ -202,7 +207,21 @@ serve(async (req) => {
     
     for (const provider of providerOptions) {
       console.log(`[process-order] Trying provider: ${provider.name}`)
-      
+
+      // If we don't have time to safely attempt another provider (fetch + status
+      // capture + DB update), stop and return a soft-failure. The dispatcher/
+      // retry loop will pick the order back up on the next tick rather than
+      // the gateway killing us with a 504.
+      if (remainingMs() < 8_000) {
+        console.log(`[process-order] Deadline approaching (${remainingMs()}ms left), deferring remaining providers`)
+        await supabase.from('orders').update({
+          status: 'pending',
+          error_message: `Deferred (provider dispatch exceeded time budget). Last: ${lastError || 'none'}`,
+          updated_at: new Date().toISOString(),
+        }).eq('id', order_id).is('provider_order_id', null)
+        return new Response(JSON.stringify({ success: false, deferred: true, error: 'Provider dispatch deferred due to time budget; will retry.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
       const formData = new URLSearchParams()
       formData.append('key', provider.apiKey)
       formData.append('action', 'add')
@@ -212,7 +231,10 @@ serve(async (req) => {
 
       try {
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        // Per-provider timeout: keep it well under the wall-clock so multiple
+        // providers can still be attempted within one invocation.
+        const perProviderTimeout = Math.max(4_000, Math.min(12_000, remainingMs() - 5_000))
+        const timeoutId = setTimeout(() => controller.abort(), perProviderTimeout)
         
         const response = await fetch(provider.apiUrl, {
           method: 'POST',
@@ -260,13 +282,15 @@ serve(async (req) => {
 
         // Capture STARTING COUNT from provider immediately after dispatch.
         // This becomes the anchor for target = start + ordered.
-        try {
+        // Skip if we're low on time — a background sync job will pick it up
+        // later. The order is already marked processing, so this is safe.
+        if (remainingMs() > 6_000) try {
           const statusForm = new URLSearchParams()
           statusForm.append('key', provider.apiKey)
           statusForm.append('action', 'status')
           statusForm.append('order', providerOrderId)
           const statusCtrl = new AbortController()
-          const statusTimer = setTimeout(() => statusCtrl.abort(), 10000)
+          const statusTimer = setTimeout(() => statusCtrl.abort(), Math.max(3_000, Math.min(8_000, remainingMs() - 3_000)))
           const statusRes = await fetch(provider.apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

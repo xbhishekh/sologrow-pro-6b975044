@@ -828,16 +828,23 @@ async function updateEngagementOrderStatus(supabase: SupabaseClient, engagementO
 
   const { data: allItems } = await supabase
     .from('engagement_order_items')
-    .select('status')
+    .select('status, quantity, delivered_count')
     .eq('engagement_order_id', engagementOrderId)
 
   if (!allItems || allItems.length === 0) return
 
-  const completedItems = allItems.filter((i: any) => i.status === 'completed').length
-  const partialItems = allItems.filter((i: any) => i.status === 'partial').length
-  const failedItems = allItems.filter((i: any) => i.status === 'failed').length
-  const cancelledItems = allItems.filter((i: any) => i.status === 'cancelled').length
-  const activeItems = allItems.filter((i: any) => i.status === 'processing' || i.status === 'pending').length
+  const effectiveItems = allItems.map((item: any) => {
+    const quantity = Number(item.quantity || 0)
+    const delivered = Number(item.delivered_count || 0)
+    if (quantity > 0 && delivered >= quantity) return { ...item, effective_status: 'completed' }
+    return { ...item, effective_status: item.status }
+  })
+
+  const completedItems = effectiveItems.filter((i: any) => i.effective_status === 'completed').length
+  const partialItems = effectiveItems.filter((i: any) => i.effective_status === 'partial').length
+  const failedItems = effectiveItems.filter((i: any) => i.effective_status === 'failed').length
+  const cancelledItems = effectiveItems.filter((i: any) => i.effective_status === 'cancelled').length
+  const activeItems = effectiveItems.filter((i: any) => i.effective_status === 'processing' || i.effective_status === 'pending').length
   const totalItems = allItems.length
 
   let orderStatus = 'processing'

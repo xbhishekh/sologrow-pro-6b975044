@@ -607,9 +607,15 @@ export default function EngagementOrderDetail() {
       // Calculate scheduled (NO capping, just sum all non-failed runs)
       const totalScheduled = itemRuns.reduce((sum: number, r: any) => sum + r.quantity_to_send, 0);
       
-      // Calculate delivered (provider truth)
+      // Calculate delivered from the synced item tracker first. This is the
+      // backend source of truth after target-count completion, because final
+      // runs can be cancelled once the target is already reached.
+      const trackedDelivered = typeof item.delivered_count === 'number'
+        ? Math.min(Number(item.quantity || 0), Math.max(0, Number(item.delivered_count || 0)))
+        : null;
       const allItemRuns = item.runs || [];
-      const totalDelivered = allItemRuns.reduce((sum: number, r: any) => sum + calculateActualDelivered(r), 0);
+      const runDelivered = allItemRuns.reduce((sum: number, r: any) => sum + calculateActualDelivered(r), 0);
+      const totalDelivered = trackedDelivered !== null ? Math.max(trackedDelivered, runDelivered) : runDelivered;
       
       return {
         type: item.engagement_type,
@@ -698,10 +704,11 @@ export default function EngagementOrderDetail() {
   const liveDelivered = stats?.totalDelivered ?? 0;
   const hasPending = (stats?.pendingRuns?.length ?? 0) > 0;
   const hasActive = (stats?.startedRuns?.length ?? 0) > 0;
+  const terminalStatuses = new Set(['completed', 'partial', 'cancelled', 'failed']);
   let effectiveStatus = order.status as string;
   if (totalOriginalQuantity > 0 && liveDelivered >= totalOriginalQuantity) {
     effectiveStatus = 'completed';
-  } else if (effectiveStatus !== 'cancelled' && effectiveStatus !== 'failed' && effectiveStatus !== 'paused') {
+  } else if (!terminalStatuses.has(effectiveStatus) && effectiveStatus !== 'paused') {
     if (hasActive || hasPending || liveDelivered > 0) {
       effectiveStatus = 'processing';
     }

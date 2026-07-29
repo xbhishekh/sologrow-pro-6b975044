@@ -17,8 +17,15 @@ const canonicalLink = (value?: string | null) => {
     try {
         const url = new URL(raw)
         url.hash = ''
-        url.search = ''
-        return `${url.origin}${url.pathname}`.toLowerCase().replace(/\/+$/, '')
+        const host = url.hostname.toLowerCase().replace(/^www\./, '')
+        const isYouTubeWatch = (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com')
+            && url.pathname.replace(/\/+$/, '') === '/watch'
+        let keptSearch = ''
+        if (isYouTubeWatch) {
+            const v = url.searchParams.get('v')
+            if (v) keptSearch = `?v=${v}`
+        }
+        return `${url.origin}${url.pathname}${keptSearch}`.toLowerCase().replace(/([^?])\/+$/, '$1')
     } catch {
         return raw.toLowerCase().replace(/[?#].*$/, '').replace(/\/+$/, '')
     }

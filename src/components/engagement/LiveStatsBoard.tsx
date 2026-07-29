@@ -28,7 +28,7 @@ export function LiveStatsBoard({
   onRetryFailed,
   isRetrying = false,
 }: LiveStatsBoardProps) {
-  const progressPercent = totalQuantity > 0 ? (totalDelivered / totalQuantity) * 100 : 0;
+  const progressPercent = totalQuantity > 0 ? Math.min(100, (totalDelivered / totalQuantity) * 100) : 0;
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-background via-background to-secondary/20">

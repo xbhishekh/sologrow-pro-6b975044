@@ -15,7 +15,7 @@ KEY="${OXAPAY_MERCHANT_API_KEY:-${OXAPAY_API_KEY:-${OXAPAY_KEY:-}}}"
 
 q() { docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -tAq -c "$1"; }
 
-rows="$(q "select order_id, coalesce(track_id,''), amount_usd
+rows="$(q "select order_id, coalesce(track_id,''), amount_usd, user_id, amount_inr
            from public.oxapay_deposits
            where credited = false
              and created_at > now() - interval '$DAYS days'
@@ -24,7 +24,7 @@ rows="$(q "select order_id, coalesce(track_id,''), amount_usd
 [ -n "$rows" ] || { echo "koi uncredited deposit nahi mila (last $DAYS din)"; exit 0; }
 
 echo "==> checking $(echo "$rows" | wc -l) uncredited deposits"
-while IFS='|' read -r order track expected; do
+while IFS='|' read -r order track expected user_id amount_inr; do
   [ -n "$order" ] || continue
   if [ -z "$track" ]; then echo "  $order  -> track_id nahi hai, skip"; continue; fi
   resp="$(curl -s --max-time 25 -H "merchant_api_key: $KEY" "https://api.oxapay.com/v1/payment/$track" || true)"
@@ -52,6 +52,19 @@ except Exception: print(0)" 2>/dev/null)"
       q "update public.oxapay_deposits set status='$status', updated_at=now() where order_id='$order'" >/dev/null
       out="$(q "select public.credit_wallet_oxapay('$order')")"
       echo "  $order  -> CREDITED  $out"
+      if printf '%s' "$out" | grep -q '"credited"[[:space:]]*:[[:space:]]*true'; then
+        notify_payload="$(python3 -c 'import json,sys; print(json.dumps({"user_id":sys.argv[1],"order_id":sys.argv[2],"method":"OxaPay","status":"success","amount_inr":float(sys.argv[3]),"amount_usd":float(sys.argv[4])}))' "$user_id" "$order" "$amount_inr" "$expected")"
+        notify_code="$(curl -sS --max-time 20 -o /tmp/oxapay-notify-response.json -w '%{http_code}' \
+          "https://$APP_DOMAIN/functions/v1/notify-deposit-status" \
+          -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+          -H 'Content-Type: application/json' \
+          -d "$notify_payload" || true)"
+        if [ "$notify_code" = "200" ]; then
+          echo "  $order  -> Telegram notification sent"
+        else
+          echo "  $order  -> WARNING: Telegram notification failed (HTTP ${notify_code:-network_error})"
+        fi
+      fi
       ;;
     *)
       [ -n "$status" ] && q "update public.oxapay_deposits set status='$status', updated_at=now() where order_id='$order'" >/dev/null

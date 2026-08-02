@@ -10,27 +10,36 @@ export function tgConfigured(): boolean {
 }
 
 export async function tgCall(path: string, body: Record<string, unknown>): Promise<any> {
+  let res: Response;
   if (BOT_TOKEN) {
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${path}`, {
+    res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    return await res.json().catch(() => ({}));
+  } else {
+    if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) {
+      throw new Error("Telegram not configured (set TELEGRAM_BOT_TOKEN)");
+    }
+    res = await fetch(`${GATEWAY_URL}/${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "X-Connection-Api-Key": TELEGRAM_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
   }
-  if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) {
-    throw new Error("Telegram not configured (set TELEGRAM_BOT_TOKEN)");
+
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  if (!res.ok || data?.ok === false) {
+    const detail = data?.description || data?.error || text || `HTTP ${res.status}`;
+    throw new Error(`Telegram ${path} failed [${res.status}]: ${detail}`);
   }
-  const res = await fetch(`${GATEWAY_URL}/${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "X-Connection-Api-Key": TELEGRAM_API_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  return await res.json().catch(() => ({}));
+  return data;
 }
 
 export async function tgWebhookSecret(): Promise<string> {

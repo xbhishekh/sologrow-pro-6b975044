@@ -72,6 +72,11 @@ Deno.serve(async (req) => {
     if (remotePaid && remoteAmountOk) {
       const { data: res } = await admin.rpc('credit_wallet_oxapay', { p_order_id: orderId })
       credited = !!(res as any)?.credited
+      if (credited && !(res as any)?.duplicate) {
+        await notifyDeposit(userId, orderId, dep.amount_inr, dep.amount_usd).catch((error) => {
+          console.error('OxaPay Telegram notification failed', error)
+        })
+      }
     }
 
     // Re-read
@@ -93,4 +98,25 @@ function json(b: unknown, status = 200) {
   return new Response(JSON.stringify(b), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status,
   })
+}
+
+async function notifyDeposit(
+  userId: string,
+  orderId: string,
+  amountInr: number | null,
+  amountUsd: number | null,
+) {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/notify-deposit-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}` },
+    body: JSON.stringify({
+      user_id: userId,
+      order_id: orderId,
+      method: 'OxaPay',
+      status: 'success',
+      amount_inr: amountInr,
+      amount_usd: amountUsd,
+    }),
+  })
+  if (!response.ok) throw new Error(`notify-deposit-status returned ${response.status}: ${await response.text()}`)
 }

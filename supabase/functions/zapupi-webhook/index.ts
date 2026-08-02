@@ -180,7 +180,6 @@ Deno.serve(async (req) => {
     await admin.from('zapupi_webhook_events').update({
       processed: true, credit_result: data as any,
     }).eq('event_key', eventKey)
-    await notifyTelegram(admin, orderId, data, 'webhook').catch((e) => console.error('tg notify', e))
     if ((data as any)?.credited && !(data as any)?.duplicate) {
       await notifyUserAdmin(dep.user_id, orderId, 'success', dep.amount_inr).catch(() => {})
     }

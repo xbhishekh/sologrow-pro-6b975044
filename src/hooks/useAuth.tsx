@@ -35,12 +35,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const [profileResult, walletResult, roleResult] = await Promise.all([
         supabase.from('profiles').select('*').eq('user_id', userId).single(),
         supabase.from('wallets').select('*').eq('user_id', userId).single(),
-        supabase.from('user_roles').select('role').eq('user_id', userId).single(),
+        supabase.from('user_roles').select('role').eq('user_id', userId),
       ]);
 
       if (profileResult.data) setProfile(profileResult.data as unknown as Profile);
       if (walletResult.data) setWallet(walletResult.data as Wallet);
-      if (roleResult.data) setRole(roleResult.data.role as AppRole);
+      const roles = (roleResult.data ?? []).map((r) => r.role as AppRole);
+      if (roles.length > 0) {
+        // Highest privilege wins when a user has multiple role rows
+        const best = roles.includes('admin' as AppRole)
+          ? ('admin' as AppRole)
+          : roles.includes('moderator' as AppRole)
+            ? ('moderator' as AppRole)
+            : roles[0];
+        setRole(best);
+      }
     } catch (error) {
       console.error('Error fetching user data:', error);
     }

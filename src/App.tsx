@@ -13,27 +13,51 @@ import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 import { TelegramJoinPopup } from "@/components/TelegramJoinPopup";
 
 
-// ALL pages eager-loaded for instantaneous navigation
+// Landing + auth stay eager (first paint). Everything else is code-split
+// and prefetched on idle, so navigation still feels instant.
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
-import Orders from "./pages/Orders";
-import Wallet from "./pages/Wallet";
-import Settings from "./pages/Settings";
-import Support from "./pages/Support";
-import ApiAccess from "./pages/ApiAccess";
 
-// Engagement pages
-import EngagementOrder from "./pages/EngagementOrder";
-import EngagementOrders from "./pages/EngagementOrders";
-import EngagementOrderDetail from "./pages/EngagementOrderDetail";
+const loadDashboard = () => import("./pages/Dashboard");
+const loadOrders = () => import("./pages/Orders");
+const loadWallet = () => import("./pages/Wallet");
+const loadSettings = () => import("./pages/Settings");
+const loadSupport = () => import("./pages/Support");
+const loadApiAccess = () => import("./pages/ApiAccess");
+const loadEngagementOrder = () => import("./pages/EngagementOrder");
+const loadEngagementOrders = () => import("./pages/EngagementOrders");
+const loadEngagementOrderDetail = () => import("./pages/EngagementOrderDetail");
 
-// Admin pages
+const Dashboard = lazy(loadDashboard);
+const Orders = lazy(loadOrders);
+const Wallet = lazy(loadWallet);
+const Settings = lazy(loadSettings);
+const Support = lazy(loadSupport);
+const ApiAccess = lazy(loadApiAccess);
+const EngagementOrder = lazy(loadEngagementOrder);
+const EngagementOrders = lazy(loadEngagementOrders);
+const EngagementOrderDetail = lazy(loadEngagementOrderDetail);
 
-
-// Legal pages
-
+// Warm the app chunks once the browser is idle so route changes are instant.
+const prefetchAppRoutes = () => {
+  const loaders = [
+    loadDashboard,
+    loadEngagementOrder,
+    loadEngagementOrders,
+    loadEngagementOrderDetail,
+    loadOrders,
+    loadWallet,
+    loadSupport,
+    loadSettings,
+    loadApiAccess,
+  ];
+  loaders.forEach((load, i) => {
+    setTimeout(() => {
+      load().catch(() => {});
+    }, i * 150);
+  });
+};
 
 // Admin + legal pages are code-split (loaded on demand) to keep the main bundle small
 const Admin = lazy(() => import("./pages/admin/Admin"));

@@ -104,10 +104,80 @@ export default function AdminUsers() {
   const { data: users, isLoading } = useQuery({
     queryKey: ['admin-all-users-with-subs'],
     queryFn: async () => {
+      let rows: any[] = [];
       const { data, error } = await supabase.rpc('get_admin_users_summary' as any);
-      if (error) throw error;
+      if (!error && Array.isArray(data)) rows = data as any[];
 
-      return ((data as any) || []).map((u: any) => ({
+      // Fallback: RPC missing/limited (self-hosted) — direct paginated fetch
+      const { count: profileCount } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true });
+
+      if (rows.length === 0 || (profileCount || 0) > rows.length) {
+        const pageSize = 1000;
+        const profiles: any[] = [];
+        for (let from = 0; ; from += pageSize) {
+          const { data: p, error: pe } = await supabase
+            .from('profiles')
+            .select('id, user_id, email, full_name, created_at, is_banned, banned_at, banned_reason')
+            .order('created_at', { ascending: false })
+            .range(from, from + pageSize - 1);
+          if (pe) throw pe;
+          profiles.push(...(p || []));
+          if (!p || p.length < pageSize) break;
+        }
+
+        const wallets: any[] = [];
+        for (let from = 0; ; from += pageSize) {
+          const { data: w } = await supabase
+            .from('wallets')
+            .select('user_id, balance, total_deposited, total_spent')
+            .range(from, from + pageSize - 1);
+          wallets.push(...(w || []));
+          if (!w || w.length < pageSize) break;
+        }
+
+        const roles: any[] = [];
+        for (let from = 0; ; from += pageSize) {
+          const { data: r } = await supabase
+            .from('user_roles')
+            .select('user_id, role')
+            .range(from, from + pageSize - 1);
+          roles.push(...(r || []));
+          if (!r || r.length < pageSize) break;
+        }
+
+        const subs: any[] = [];
+        for (let from = 0; ; from += pageSize) {
+          const { data: s } = await supabase
+            .from('subscriptions')
+            .select('user_id, plan_type, status, expires_at')
+            .range(from, from + pageSize - 1);
+          subs.push(...(s || []));
+          if (!s || s.length < pageSize) break;
+        }
+
+        const wMap = new Map(wallets.map((w) => [w.user_id, w]));
+        const rMap = new Map<string, string>();
+        for (const r of roles) {
+          const prev = rMap.get(r.user_id);
+          if (!prev || r.role === 'admin') rMap.set(r.user_id, r.role);
+        }
+        const sMap = new Map(subs.map((s) => [s.user_id, s]));
+
+        rows = profiles.map((p) => ({
+          ...p,
+          balance: wMap.get(p.user_id)?.balance ?? 0,
+          total_deposited: wMap.get(p.user_id)?.total_deposited ?? 0,
+          total_spent: wMap.get(p.user_id)?.total_spent ?? 0,
+          role: rMap.get(p.user_id) || 'user',
+          subscription_plan: sMap.get(p.user_id)?.plan_type || 'none',
+          subscription_status: sMap.get(p.user_id)?.status || 'inactive',
+          subscription_expires: sMap.get(p.user_id)?.expires_at || null,
+        }));
+      }
+
+      return rows.map((u: any) => ({
         ...u,
         wallet: {
           balance: u.balance,

@@ -143,7 +143,6 @@ const Index = () => {
 
       {/* ═══ HERO ═══ */}
       <main>
-      <LiveTicker />
       <section className="pt-14 sm:pt-20 lg:pt-28 pb-12 sm:pb-16 text-center px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 mb-6">

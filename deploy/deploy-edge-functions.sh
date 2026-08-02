@@ -161,6 +161,21 @@ if docker exec "$FUNCTIONS_CONTAINER_ID" printenv TELEGRAM_BOT_TOKEN 2>/dev/null
 else
   die "Telegram bot token/chat ID functions container me load nahi hua"
 fi
+
+log "Telegram payment-alert smoke test"
+TG_TOKEN="${TELEGRAM_BOT_TOKEN:-${TELEGRAM_TOKEN:-}}"
+TG_CHAT="${TELEGRAM_CHAT_ID:-}"
+[ -n "$TG_TOKEN" ] || die "TELEGRAM_BOT_TOKEN missing hai"
+[ -n "$TG_CHAT" ] || die "TELEGRAM_CHAT_ID missing hai"
+TG_TEST_RESPONSE="$(curl -sS --max-time 20 "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+  -H 'Content-Type: application/json' \
+  -d "$(python3 -c 'import json,sys; print(json.dumps({"chat_id":sys.argv[1],"text":"✅ OrganicSMM payment alerts are working."}))' "$TG_CHAT")" || true)"
+if printf '%s' "$TG_TEST_RESPONSE" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+  ok "Telegram test message admin chat me bhej diya"
+else
+  TG_ERROR="$(printf '%s' "$TG_TEST_RESPONSE" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("description","unknown Telegram error"))' 2>/dev/null || echo 'Telegram API unreachable')"
+  die "Telegram test failed: $TG_ERROR"
+fi
 ok "edge runtime restarted"
 
 log "smoke test"

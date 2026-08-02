@@ -65,13 +65,32 @@ fi
 log "compose override for functions env"
 cd "$SUPABASE_DIR/docker"
 python3 - <<'PY'
-import io,os,re
-p='docker-compose.override.yml'
-s=open(p).read() if os.path.exists(p) else "services:\n"
-if 'functions:' not in s:
-    s += "  functions:\n    env_file:\n      - ./functions.env\n"
-open(p,'w').write(s)
+import os, json
+p = 'docker-compose.override.yml'
+data = {}
+if os.path.exists(p):
+    try:
+        import yaml
+        data = yaml.safe_load(open(p).read()) or {}
+    except Exception:
+        data = {}
+if not isinstance(data, dict):
+    data = {}
+svcs = data.get('services') or {}
+fn = svcs.get('functions') or {}
+envf = fn.get('env_file') or []
+if isinstance(envf, str):
+    envf = [envf]
+if './functions.env' not in envf:
+    envf.append('./functions.env')
+fn['env_file'] = envf
+svcs['functions'] = fn
+data['services'] = svcs
+# JSON is valid YAML — avoids needing PyYAML for writing.
+open(p, 'w').write(json.dumps(data, indent=2) + "\n")
 PY
+# Show compose's resolved view so misconfigured overrides are obvious.
+docker compose config --services >/dev/null
 # `docker compose up` does not recreate an existing container when only the
 # env_file contents change. Force recreation so rotated/added keys are loaded.
 docker compose up -d --force-recreate functions
@@ -79,10 +98,41 @@ sleep 5
 FUNCTIONS_CONTAINER_ID="$(docker compose ps -q functions)"
 [ -n "$FUNCTIONS_CONTAINER_ID" ] || die "functions container nahi mila"
 if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
-  docker inspect "$FUNCTIONS_CONTAINER_ID" --format '{{range .Config.Env}}{{println .}}{{end}}' \
-    | grep -q '^ZAPUPI_ZAP_KEY=.' \
-    || die "ZapUPI API key functions container me load nahi hui"
-  ok "ZapUPI API key edge runtime me loaded"
+  if docker inspect "$FUNCTIONS_CONTAINER_ID" --format '{{range .Config.Env}}{{println .}}{{end}}' \
+       | grep -q '^ZAPUPI_ZAP_KEY=.'; then
+    ok "ZapUPI API key edge runtime me loaded"
+  else
+    log "env_file override load nahi hua — fallback: explicit environment override"
+    python3 - "$ZAPUPI_EFFECTIVE_KEY" <<'PY'
+import os, sys, json
+key = sys.argv[1]
+p = 'docker-compose.override.yml'
+data = {}
+if os.path.exists(p):
+    try:
+        import yaml
+        data = yaml.safe_load(open(p).read()) or {}
+    except Exception:
+        data = {}
+svcs = data.get('services') or {}
+fn = svcs.get('functions') or {}
+env = fn.get('environment') or {}
+if isinstance(env, list):
+    env = dict(e.split('=', 1) for e in env if '=' in e)
+env['ZAPUPI_ZAP_KEY'] = key
+fn['environment'] = env
+svcs['functions'] = fn
+data['services'] = svcs
+open(p, 'w').write(json.dumps(data, indent=2) + "\n")
+PY
+    docker compose up -d --force-recreate functions
+    sleep 5
+    FUNCTIONS_CONTAINER_ID="$(docker compose ps -q functions)"
+    docker inspect "$FUNCTIONS_CONTAINER_ID" --format '{{range .Config.Env}}{{println .}}{{end}}' \
+      | grep -q '^ZAPUPI_ZAP_KEY=.' \
+      || die "ZapUPI API key functions container me load nahi hui"
+    ok "ZapUPI API key edge runtime me loaded (fallback)"
+  fi
 fi
 ok "edge runtime restarted"
 

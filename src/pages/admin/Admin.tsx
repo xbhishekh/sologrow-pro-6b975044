@@ -54,6 +54,55 @@ export default function Admin() {
     refetchOnWindowFocus: true,
   });
 
+  // Fallback: agar RPC 0/fail de to direct tables se paginated aggregate
+  const { data: depositFallback } = useQuery({
+    queryKey: ['admin-deposit-fallback'],
+    queryFn: async () => {
+      const pageSize = 1000;
+      let from = 0;
+      let total = 0;
+      let count = 0;
+      let today = 0;
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      // deposits
+      for (;;) {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('amount, created_at')
+          .eq('type', 'deposit')
+          .eq('status', 'completed')
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        const rows = data || [];
+        for (const r of rows) {
+          const amt = Number((r as any).amount) || 0;
+          total += amt;
+          count += 1;
+          if (new Date((r as any).created_at) >= startOfDay) today += amt;
+        }
+        if (rows.length < pageSize) break;
+        from += pageSize;
+      }
+      // wallets live balance
+      let wFrom = 0;
+      let walletTotal = 0;
+      for (;;) {
+        const { data, error } = await supabase
+          .from('wallets')
+          .select('balance')
+          .range(wFrom, wFrom + pageSize - 1);
+        if (error) throw error;
+        const rows = data || [];
+        for (const r of rows) walletTotal += Number((r as any).balance) || 0;
+        if (rows.length < pageSize) break;
+        wFrom += pageSize;
+      }
+      return { total, count, today, walletTotal };
+    },
+    refetchInterval: 30000,
+  });
+
   useEffect(() => {
     if (dashboardStats && !maintenanceLoaded) {
       setMaintenanceMode(Boolean(dashboardStats.maintenance_mode));
@@ -85,10 +134,10 @@ export default function Admin() {
   const totalOrders = dashboardStats?.total_orders || 0;
   const userCount = dashboardStats?.user_count || 0;
   const serviceCount = dashboardStats?.service_count || 0;
-  const totalDepositsUsd = Number(dashboardStats?.total_deposits || 0);
-  const totalWalletUsd = Number(dashboardStats?.total_wallet_balance || 0);
-  const depositsTodayUsd = Number(dashboardStats?.deposits_today || 0);
-  const depositsCount = Number(dashboardStats?.deposits_count || 0);
+  const totalDepositsUsd = Number(dashboardStats?.total_deposits || 0) || Number(depositFallback?.total || 0);
+  const totalWalletUsd = Number(dashboardStats?.total_wallet_balance || 0) || Number(depositFallback?.walletTotal || 0);
+  const depositsTodayUsd = Number(dashboardStats?.deposits_today || 0) || Number(depositFallback?.today || 0);
+  const depositsCount = Number(dashboardStats?.deposits_count || 0) || Number(depositFallback?.count || 0);
 
   return (
     <DashboardLayout>

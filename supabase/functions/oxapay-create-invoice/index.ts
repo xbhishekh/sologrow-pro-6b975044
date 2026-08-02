@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 
-const OXAPAY_KEY = Deno.env.get('OXAPAY_MERCHANT_API_KEY')!
+const OXAPAY_KEY = (Deno.env.get('OXAPAY_MERCHANT_API_KEY') || '').trim()
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -10,16 +10,19 @@ const USD_TO_INR = 90
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   try {
+    if (!OXAPAY_KEY) return json({ error: 'Crypto payment gateway is not configured' }, 503)
     const authHeader = req.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) return json({ error: 'Unauthorized' }, 401)
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     })
     const token = authHeader.replace('Bearer ', '')
-    const { data: claims, error: claimsErr } = await userClient.auth.getClaims(token)
-    if (claimsErr || !claims?.claims?.sub) return json({ error: 'Unauthorized' }, 401)
-    const userId = claims.claims.sub as string
-    const email = (claims.claims.email as string) || ''
+    // Self-hosted GoTrue does not reliably support getClaims(); validate the
+    // bearer token against Auth instead so migrated users work as well.
+    const { data: userData, error: userErr } = await userClient.auth.getUser(token)
+    if (userErr || !userData.user?.id) return json({ error: 'Unauthorized' }, 401)
+    const userId = userData.user.id
+    const email = userData.user.email || ''
 
     const body = await req.json().catch(() => ({}))
     const rawInr = body?.amount_inr
@@ -39,13 +42,14 @@ Deno.serve(async (req) => {
     const orderId = 'OXP_' + crypto.randomUUID()
     const returnBase = getSafeReturnBase(body?.return_origin)
 
-    await admin.from('oxapay_deposits').insert({
+    const { error: depositErr } = await admin.from('oxapay_deposits').insert({
       user_id: userId,
       order_id: orderId,
       amount_usd: amountUsd,
       amount_inr: amountInr,
       status: 'waiting',
     })
+    if (depositErr) return json({ error: 'Could not start crypto payment', detail: depositErr.message }, 500)
 
     const payload = {
       amount: amountUsd,

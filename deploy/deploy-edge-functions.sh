@@ -42,6 +42,7 @@ ENVF="$SUPABASE_DIR/docker/functions.env"
 # ZapUPI issues only one API key, but older VPS installs saved it under
 # different names. Normalize it to the canonical name consumed by functions.
 ZAPUPI_EFFECTIVE_KEY="${ZAPUPI_ZAP_KEY:-${ZAPUPI_TOKEN:-${ZAPUPI_API_KEY:-${ZAPUPI_KEY:-${ZAPUPI_SECRET:-}}}}}"
+OXAPAY_EFFECTIVE_KEY="${OXAPAY_MERCHANT_API_KEY:-}"
 {
   echo "SUPABASE_URL=https://$APP_DOMAIN"
   echo "SUPABASE_ANON_KEY=$ANON_KEY"
@@ -61,6 +62,11 @@ if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
 else
   log "WARNING: ZapUPI API key is missing in $SECRETS_FILE"
 fi
+if [ -n "$OXAPAY_EFFECTIVE_KEY" ]; then
+  ok "OxaPay merchant API key configured"
+else
+  log "WARNING: OxaPay merchant API key is missing in $SECRETS_FILE"
+fi
 
 log "compose override for functions env"
 cd "$SUPABASE_DIR/docker"
@@ -73,6 +79,11 @@ if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
   touch .env
   sed -i '/^ZAPUPI_ZAP_KEY=/d' .env
   printf 'ZAPUPI_ZAP_KEY=%s\n' "$ZAPUPI_EFFECTIVE_KEY" >> .env
+fi
+if [ -n "$OXAPAY_EFFECTIVE_KEY" ]; then
+  touch .env
+  sed -i '/^OXAPAY_MERCHANT_API_KEY=/d' .env
+  printf 'OXAPAY_MERCHANT_API_KEY=%s\n' "$OXAPAY_EFFECTIVE_KEY" >> .env
 fi
 python3 - <<'PY'
 import os, json
@@ -100,6 +111,7 @@ env = fn.get('environment') or {}
 if isinstance(env, list):
     env = dict(e.split('=', 1) for e in env if '=' in e)
 env['ZAPUPI_ZAP_KEY'] = '${ZAPUPI_ZAP_KEY:-}'
+env['OXAPAY_MERCHANT_API_KEY'] = '${OXAPAY_MERCHANT_API_KEY:-}'
 fn['environment'] = env
 svcs['functions'] = fn
 data['services'] = svcs
@@ -126,6 +138,13 @@ if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
     ok "ZapUPI API key edge runtime me loaded"
   else
     die "ZapUPI key functions container me load nahi hui; merged compose config check karo"
+  fi
+fi
+if [ -n "$OXAPAY_EFFECTIVE_KEY" ]; then
+  if docker exec "$FUNCTIONS_CONTAINER_ID" printenv OXAPAY_MERCHANT_API_KEY 2>/dev/null | grep -q '.'; then
+    ok "OxaPay merchant API key edge runtime me loaded"
+  else
+    die "OxaPay key functions container me load nahi hui; merged compose config check karo"
   fi
 fi
 ok "edge runtime restarted"

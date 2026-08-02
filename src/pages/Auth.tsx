@@ -75,7 +75,7 @@ export default function Auth() {
       } else {
         const v = signupSchema.safeParse({ email, password, fullName });
         if (!v.success) { setError(v.error.errors[0].message); setIsSubmitting(false); return; }
-        const { error } = await signUp(email, password, fullName);
+        const { error, needsEmailConfirmation } = await signUp(email, password, fullName);
         if (error) {
           const msg = error.message.toLowerCase();
           if (msg.includes('already registered')) setError('This email is already registered.');
@@ -83,8 +83,12 @@ export default function Auth() {
           else setError(error.message || 'Signup failed.');
           setIsSubmitting(false); return;
         }
-        setSuccessMessage('Account created successfully!');
-        setTimeout(() => setIsLogin(true), 2000);
+        if (needsEmailConfirmation) {
+          setShowVerifyEmail(true);
+        } else {
+          setSuccessMessage('Account created successfully!');
+          setTimeout(() => setIsLogin(true), 2000);
+        }
       }
     } catch (err: any) {
       if (!err?.message?.includes('abort')) setError('Something went wrong. Please try again.');

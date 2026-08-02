@@ -1,11 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { tgCall, tgConfigured } from '../_shared/telegram.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY') || ''
 const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY') || ''
 const ADMIN_CHAT_ID = Deno.env.get('TELEGRAM_CHAT_ID') || ''
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,18 +19,9 @@ function esc(v: unknown): string {
 }
 
 async function tgSend(chatId: string | number, text: string) {
-  if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) return { skipped: true }
+  if (!tgConfigured()) return { skipped: true }
   try {
-    const r = await fetch(`${GATEWAY_URL}/sendMessage`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        'X-Connection-Api-Key': TELEGRAM_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
-    })
-    return await r.json().catch(() => ({}))
+    return await tgCall('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true })
   } catch (e) {
     return { error: String((e as Error).message || e) }
   }

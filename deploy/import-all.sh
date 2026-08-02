@@ -55,7 +55,6 @@ for pass in 1 2 3; do
         *_at)                    typ="timestamptz" ;;
         is_*|has_*|*_enabled)    typ="boolean" ;;
         *_count|*_percent|*_amount|*_price|*quantity*) typ="numeric" ;;
-        *_id)                    typ="uuid" ;;
         *_data|*_json|*_meta|*_response) typ="jsonb" ;;
         *)                       typ="text" ;;
       esac

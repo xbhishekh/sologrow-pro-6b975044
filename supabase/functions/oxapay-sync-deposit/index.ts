@@ -43,6 +43,7 @@ Deno.serve(async (req) => {
     // self-hosted setup (firewall / wrong callback URL).
     let remotePaid = false
     let remoteAmountOk = true
+    let gatewayError: string | null = null
     if (dep.track_id) {
       try {
         const r = await fetch(`https://api.oxapay.com/v1/payment/${dep.track_id}`, {
@@ -51,9 +52,12 @@ Deno.serve(async (req) => {
         const txt = await r.text()
         let data: any = {}
         try { data = JSON.parse(txt) } catch { data = { raw: txt } }
+        if (!r.ok) {
+          throw new Error(`OxaPay inquiry HTTP ${r.status}`)
+        }
         const inner = data?.data ?? data
         const remoteStatus = String(inner?.status || '').toLowerCase()
-        remotePaid = ['paid', 'confirmed', 'completed', 'success'].includes(remoteStatus)
+        remotePaid = ['paid', 'confirmed', 'completed', 'complete', 'success'].includes(remoteStatus)
         const paidAmt = Number(inner?.amount ?? inner?.paid_amount ?? inner?.received_amount)
         const expectedUsd = Number(dep.amount_usd)
         if (remotePaid && Number.isFinite(paidAmt) && Number.isFinite(expectedUsd) && expectedUsd > 0) {
@@ -66,12 +70,19 @@ Deno.serve(async (req) => {
             raw_payload: data,
           }).eq('order_id', orderId)
         }
-      } catch { /* ignore polling errors */ }
+      } catch (error) {
+        gatewayError = String((error as Error).message || error)
+        console.error('OxaPay payment inquiry failed', { orderId, error: gatewayError })
+      }
     }
 
     let credited = false
     if (remotePaid && remoteAmountOk) {
-      const { data: res } = await admin.rpc('credit_wallet_oxapay', { p_order_id: orderId })
+      const { data: res, error: creditError } = await admin.rpc('credit_wallet_oxapay', { p_order_id: orderId })
+      if (creditError) {
+        console.error('OxaPay wallet credit failed', { orderId, error: creditError.message })
+        return json({ error: 'Payment verified but wallet credit failed', detail: creditError.message }, 500)
+      }
       credited = !!(res as any)?.credited
       if (credited && !(res as any)?.duplicate) {
         await notifyDepositDirect(admin, {
@@ -96,6 +107,7 @@ Deno.serve(async (req) => {
       already: !!fresh?.credited,
       status: fresh?.status || dep.status,
       awaiting: fresh?.credited ? undefined : 'payment_confirmation',
+      gateway_error: gatewayError || undefined,
     })
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500)

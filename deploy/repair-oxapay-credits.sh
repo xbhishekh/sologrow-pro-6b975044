@@ -43,7 +43,7 @@ try:
 except Exception: print(0)" 2>/dev/null)"
 
   case "$status" in
-    paid|confirmed|completed|success)
+    paid|confirmed|completed|complete|success)
       ok="$(python3 -c "print(1 if float('$paid_amt') >= float('$expected')*0.98 else 0)")"
       if [ "$ok" != "1" ]; then
         echo "  $order  -> $status par amount kam ($paid_amt < $expected), manual check"

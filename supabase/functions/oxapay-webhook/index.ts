@@ -33,12 +33,17 @@ Deno.serve(async (req) => {
   const expectedSig = await hmacSha512Hex(OXAPAY_KEY, rawBody)
   const signatureValid = !!receivedSig && timingSafeEqual(receivedSig.toLowerCase(), expectedSig.toLowerCase())
 
-  let payload: any = {}
-  try { payload = JSON.parse(rawBody) } catch { payload = { raw: rawBody } }
+  let envelope: any = {}
+  try { envelope = JSON.parse(rawBody) } catch { envelope = { raw: rawBody } }
+  // OxaPay API v1 may wrap callback fields in `data`; legacy callbacks are
+  // top-level. Support both without changing the raw body used for HMAC.
+  const payload: any = envelope?.data && typeof envelope.data === 'object'
+    ? envelope.data
+    : envelope
 
   const orderId: string | null = payload?.order_id || payload?.orderId || null
   const trackId: string | null = payload?.track_id ? String(payload.track_id) : (payload?.trackId ? String(payload.trackId) : null)
-  const status: string | null = String(payload?.status || payload?.type || '').toLowerCase() || null
+  const status: string | null = String(payload?.status || '').toLowerCase() || null
   const txHash: string | null =
     payload?.tx_hash || payload?.txHash || payload?.txid ||
     (Array.isArray(payload?.txids) ? payload.txids[0] : null) ||
@@ -56,7 +61,7 @@ Deno.serve(async (req) => {
     status,
     signature_valid: signatureValid,
     source_ip: sourceIp,
-    payload,
+    payload: envelope,
     notes: signatureValid ? null : 'signature_invalid',
     tx_hash: txHash,
     pay_currency: payCurrency,
@@ -111,9 +116,9 @@ Deno.serve(async (req) => {
   }).eq('event_hash', eventHash)
 
   // Mirror status onto deposit (via service_role — trigger allows it)
-  const isPaid = status && ['paid', 'confirmed', 'completed', 'success'].includes(status)
+  const isPaid = status && ['paid', 'confirmed', 'completed', 'complete', 'success'].includes(status)
   const updatePatch: Record<string, unknown> = {
-    raw_payload: payload,
+    raw_payload: envelope,
     status: status || 'waiting',
   }
   if (payload?.pay_currency) updatePatch.pay_currency = payload.pay_currency
@@ -126,6 +131,7 @@ Deno.serve(async (req) => {
   if (isPaid) {
     const { data, error } = await admin.rpc('credit_wallet_oxapay', { p_order_id: orderId })
     creditResult = error ? { error: error.message } : data
+    if (error) console.error('OxaPay webhook wallet credit failed', { orderId, error: error.message })
   }
 
   await admin.from('oxapay_webhook_events').update({

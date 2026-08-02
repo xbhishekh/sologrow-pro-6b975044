@@ -26,6 +26,65 @@ const Pill: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </span>
 );
 
+// ── Live activity ticker ──────────────────────────────────────────
+const ACTIVITY = [
+  { t: 'Instagram Reel', q: '12,500 views', c: '#3B82F6', city: 'Mumbai' },
+  { t: 'YouTube Short', q: '4,200 views', c: '#EF4444', city: 'Delhi' },
+  { t: 'Instagram Post', q: '1,800 likes', c: '#EC4899', city: 'Dubai' },
+  { t: 'TikTok Video', q: '9,000 views', c: '#0B0B12', city: 'London' },
+  { t: 'Instagram Reel', q: '640 shares', c: '#10B981', city: 'Bengaluru' },
+  { t: 'Instagram Story', q: '2,300 views', c: '#8B5CF6', city: 'Toronto' },
+];
+
+const LiveTicker: React.FC = () => {
+  const [i, setI] = React.useState(0);
+  React.useEffect(() => {
+    const id = setInterval(() => setI((v) => (v + 1) % ACTIVITY.length), 3200);
+    return () => clearInterval(id);
+  }, []);
+  const a = ACTIVITY[i];
+  return (
+    <div className="flex justify-center px-4 mt-4">
+      <div key={i} className="inline-flex items-center gap-2.5 pl-2.5 pr-3.5 py-1.5 rounded-full animate-fade-in max-w-full"
+        style={{ background: 'rgba(255,255,255,.85)', border: `1px solid ${C.line}`, boxShadow: C.soft }}>
+        <span className="relative flex h-2 w-2 shrink-0">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#10B981' }} />
+          <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#10B981' }} />
+        </span>
+        <span className="text-[11.5px] sm:text-[12.5px] font-medium truncate" style={{ color: C.ink2 }}>
+          <strong style={{ color: a.c }}>{a.q}</strong> delivering to a {a.t} · {a.city}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// ── Count-up number ───────────────────────────────────────────────
+const CountUp: React.FC<{ to: number; suffix?: string; decimals?: number }> = ({ to, suffix = '', decimals = 0 }) => {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  const [val, setVal] = React.useState(0);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let raf = 0;
+    const io = new IntersectionObserver((entries) => {
+      if (!entries[0].isIntersecting) return;
+      io.disconnect();
+      const start = performance.now();
+      const dur = 1400;
+      const tick = (now: number) => {
+        const p = Math.min((now - start) / dur, 1);
+        setVal(to * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }, { threshold: 0.3 });
+    io.observe(el);
+    return () => { io.disconnect(); cancelAnimationFrame(raf); };
+  }, [to]);
+  return <span ref={ref}>{val.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}</span>;
+};
+
 const Index = () => {
   return (
     <div className="min-h-screen w-full overflow-x-hidden" style={{ background: C.bg, color: C.ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -84,6 +143,7 @@ const Index = () => {
 
       {/* ═══ HERO ═══ */}
       <main>
+      <LiveTicker />
       <section className="pt-14 sm:pt-20 lg:pt-28 pb-12 sm:pb-16 text-center px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 mb-6">
@@ -140,6 +200,49 @@ const Index = () => {
       </section>
 
       {/* ═══ FEATURES ROW ═══ */}
+      {/* ═══ LIVE STATS BAND ═══ */}
+      <section className="px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto rounded-3xl px-5 py-7 sm:px-10 sm:py-9"
+          style={{ background: C.card, border: `1px solid ${C.line}`, boxShadow: C.softLg }}>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { v: <CountUp to={52480} />, s: 'Orders delivered', icon: Activity },
+              { v: <CountUp to={2400} suffix="+" />, s: 'Active creators', icon: TrendingUp },
+              { v: <CountUp to={99.9} decimals={1} suffix="%" />, s: 'Success rate', icon: Zap },
+              { v: <CountUp to={0} />, s: 'Accounts banned', icon: Shield },
+            ].map((st, i) => (
+              <div key={i} className="text-center">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center mx-auto mb-2.5" style={{ background: C.peach }}>
+                  <st.icon className="w-4 h-4" style={{ color: C.orangeDeep }} />
+                </div>
+                <div className="text-[1.6rem] sm:text-[2.1rem] font-black tracking-tight tabular-nums"
+                  style={{ color: C.ink, fontFamily: "'Outfit', system-ui" }}>{st.v}</div>
+                <div className="text-[11.5px] font-medium mt-1" style={{ color: C.muted }}>{st.s}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* platform marquee */}
+          <div className="mt-8 pt-6 overflow-hidden" style={{ borderTop: `1px solid ${C.line}` }}>
+            <p className="text-center text-[10.5px] font-bold uppercase tracking-[0.18em] mb-4" style={{ color: C.muted }}>
+              Works across every major platform
+            </p>
+            <div className="relative">
+              <div className="flex w-max gap-3 animate-marquee hover:[animation-play-state:paused]">
+                {[...Array(2)].map((_, dup) => (
+                  <React.Fragment key={dup}>
+                    {['Instagram Reels', 'Instagram Posts', 'Instagram Stories', 'YouTube Shorts', 'YouTube Videos', 'TikTok', 'Facebook', 'Twitter / X', 'Spotify', 'Telegram'].map((p) => (
+                      <span key={dup + p} className="whitespace-nowrap px-4 py-2 rounded-xl text-[12.5px] font-semibold"
+                        style={{ background: '#FAFAF7', border: `1px solid ${C.line}`, color: C.ink2 }}>{p}</span>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="features" className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-10">

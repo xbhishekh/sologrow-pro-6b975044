@@ -64,9 +64,11 @@ fi
 
 log "compose override for functions env"
 cd "$SUPABASE_DIR/docker"
-# Supabase ka base compose `functions` service ke liye explicit `environment:`
-# rakhta hai jo .env se interpolate hota hai — wo env_file ko override kar deta
-# hai. Isliye key ko docker/.env me bhi likh dete hain.
+# Always pass the override explicitly. Some self-hosted installations set
+# COMPOSE_FILE, in which case Docker does not auto-load docker-compose.override.yml.
+BASE_COMPOSE="docker-compose.yml"
+OVERRIDE_COMPOSE="docker-compose.override.yml"
+[ -f "$BASE_COMPOSE" ] || die "$SUPABASE_DIR/docker/$BASE_COMPOSE nahi mila"
 if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
   touch .env
   sed -i '/^ZAPUPI_ZAP_KEY=/d' .env
@@ -92,18 +94,27 @@ if isinstance(envf, str):
 if './functions.env' not in envf:
     envf.append('./functions.env')
 fn['env_file'] = envf
+# Keep an explicit mapping as well. Compose resolves it from docker/.env;
+# this also overrides an empty value inherited from the base compose file.
+env = fn.get('environment') or {}
+if isinstance(env, list):
+    env = dict(e.split('=', 1) for e in env if '=' in e)
+env['ZAPUPI_ZAP_KEY'] = '${ZAPUPI_ZAP_KEY:-}'
+fn['environment'] = env
 svcs['functions'] = fn
 data['services'] = svcs
 # JSON is valid YAML — avoids needing PyYAML for writing.
 open(p, 'w').write(json.dumps(data, indent=2) + "\n")
 PY
-# Show compose's resolved view so misconfigured overrides are obvious.
-docker compose config --services >/dev/null
+COMPOSE=(docker compose -f "$BASE_COMPOSE" -f "$OVERRIDE_COMPOSE")
+# Validate the exact same merged config used for recreation.
+"${COMPOSE[@]}" config --services | grep -qx 'functions' \
+  || die "merged compose config me functions service nahi mili"
 # `docker compose up` does not recreate an existing container when only the
 # env_file contents change. Force recreation so rotated/added keys are loaded.
-docker compose up -d --force-recreate functions
+"${COMPOSE[@]}" up -d --force-recreate --no-deps functions
 sleep 5
-FUNCTIONS_CONTAINER_ID="$(docker compose ps -q functions)"
+FUNCTIONS_CONTAINER_ID="$("${COMPOSE[@]}" ps -q functions)"
 [ -n "$FUNCTIONS_CONTAINER_ID" ] || die "functions container nahi mila"
 key_in_container() {
   docker exec "$FUNCTIONS_CONTAINER_ID" printenv ZAPUPI_ZAP_KEY 2>/dev/null | grep -q '.' \
@@ -114,44 +125,7 @@ if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
   if key_in_container; then
     ok "ZapUPI API key edge runtime me loaded"
   else
-    log "env_file override load nahi hua — fallback: explicit environment override"
-    python3 - "$ZAPUPI_EFFECTIVE_KEY" <<'PY'
-import os, sys, json
-key = sys.argv[1]
-p = 'docker-compose.override.yml'
-data = {}
-if os.path.exists(p):
-    try:
-        import yaml
-        data = yaml.safe_load(open(p).read()) or {}
-    except Exception:
-        data = {}
-svcs = data.get('services') or {}
-fn = svcs.get('functions') or {}
-env = fn.get('environment') or {}
-if isinstance(env, list):
-    env = dict(e.split('=', 1) for e in env if '=' in e)
-env['ZAPUPI_ZAP_KEY'] = key
-fn['environment'] = env
-svcs['functions'] = fn
-data['services'] = svcs
-open(p, 'w').write(json.dumps(data, indent=2) + "\n")
-PY
-    docker compose up -d --force-recreate functions
-    sleep 5
-    FUNCTIONS_CONTAINER_ID="$(docker compose ps -q functions)"
-    if key_in_container; then
-      ok "ZapUPI API key edge runtime me loaded (fallback)"
-    else
-      log "last resort: container me direct env inject"
-      docker rm -f supabase-edge-functions >/dev/null 2>&1 || true
-      docker compose up -d --force-recreate functions
-      sleep 5
-      FUNCTIONS_CONTAINER_ID="$(docker compose ps -q functions)"
-      key_in_container \
-        && ok "ZapUPI API key edge runtime me loaded (recreate)" \
-        || log "WARNING: key verify nahi hui — 'docker exec supabase-edge-functions printenv | grep ZAPUPI' chala ke dekho"
-    fi
+    die "ZapUPI key functions container me load nahi hui; merged compose config check karo"
   fi
 fi
 ok "edge runtime restarted"

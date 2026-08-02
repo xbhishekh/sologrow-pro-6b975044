@@ -54,7 +54,7 @@ export default function Admin() {
     refetchOnWindowFocus: true,
   });
 
-  // Fallback: если RPC 0/fail — direct tables se paginated aggregate
+  // Fallback: agar RPC 0/fail de to direct tables se paginated aggregate
   const { data: depositFallback } = useQuery({
     queryKey: ['admin-deposit-fallback'],
     queryFn: async () => {

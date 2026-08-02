@@ -29,7 +29,7 @@ vpsql -Atc "select 'tables missing grants: '||count(*) from pg_tables t where sc
 
 echo "=== BUILD ==="
 P "dist/index.html"  "$([ -f "$APP_DIR/dist/index.html" ] && echo present || echo MISSING)"
-P "manualChunks in vite config" "$(grep -q manualChunks "$APP_DIR/vite.config.ts" && echo 'FOUND (hatao! black screen risk)' || echo 'absent (good)')"
+P "manualChunks in vite config" "$(grep -v '^\s*//' "$APP_DIR/vite.config.ts" | grep -q manualChunks && echo 'FOUND (hatao! black screen risk)' || echo 'absent (good)')"
 P "VITE_SUPABASE_URL" "$(grep VITE_SUPABASE_URL "$APP_DIR/.env" | cut -d= -f2)"
 
 echo

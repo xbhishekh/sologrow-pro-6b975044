@@ -21,12 +21,20 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } },
   );
 
-  const { data, error } = await supabase.rpc("export_auth_users_for_migration");
-  if (error) {
-    return new Response(`-- ERROR: ${error.message}\n`, { status: 500, headers: corsHeaders });
+  // PostgREST caps responses at 1000 rows — page through everything.
+  const PAGE = 500;
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase
+      .rpc("export_auth_users_for_migration")
+      .range(offset, offset + PAGE - 1);
+    if (error) {
+      return new Response(`-- ERROR: ${error.message}\n`, { status: 500, headers: corsHeaders });
+    }
+    const page = (data ?? []) as Record<string, unknown>[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
   }
-
-  const rows = (data ?? []) as Record<string, unknown>[];
   const out: string[] = [];
   out.push("-- auth.users + bcrypt password hashes (one-time migration)");
   out.push("-- generated: " + new Date().toISOString());

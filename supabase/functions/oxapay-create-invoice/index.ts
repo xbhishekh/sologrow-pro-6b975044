@@ -131,3 +131,19 @@ function getSafeReturnBase(input: unknown): string {
     return fallback
   }
 }
+
+// SUPABASE_URL inside self-hosted containers is internal (http://kong:8000),
+// which OxaPay's servers cannot reach → webhook never arrives → no credit.
+function publicFunctionsBase(returnBase: string): string {
+  const explicit = Deno.env.get('PUBLIC_SUPABASE_URL') || Deno.env.get('PUBLIC_FUNCTIONS_URL')
+  if (explicit) return explicit.replace(/\/+$/, '')
+  try {
+    const base = new URL(SUPABASE_URL)
+    const host = base.hostname.toLowerCase()
+    const internal =
+      host === 'kong' || host === 'localhost' || host === '127.0.0.1' ||
+      host === 'supabase-kong' || host.endsWith('.internal') || !host.includes('.')
+    if (!internal) return base.origin
+  } catch { /* fallback below */ }
+  return returnBase.replace(/\/+$/, '')
+}

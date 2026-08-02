@@ -27,13 +27,15 @@ fi
 systemctl enable --now docker
 ok "docker $(docker --version)"
 
-log "node 20 + pnpm"
-if ! command -v node >/dev/null 2>&1 || [ "$(node -v | cut -c2-3)" -lt 20 ]; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+log "node 22 + pnpm"
+NODE_MAJOR="$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1 || echo 0)"
+if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 22 ]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
 fi
-corepack enable >/dev/null 2>&1 || npm i -g corepack
-corepack prepare pnpm@latest --activate >/dev/null 2>&1 || npm i -g pnpm
+# pnpm latest needs node >= 22.13; pin a version that always works
+corepack enable >/dev/null 2>&1 || true
+corepack prepare pnpm@9.15.4 --activate >/dev/null 2>&1 || npm i -g pnpm@9.15.4
 ok "node $(node -v), pnpm $(pnpm -v)"
 
 log "caddy"

@@ -6,16 +6,20 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   const requestUrl = new URL(req.url)
-  const status = normalizeStatus(requestUrl.searchParams.get('status'))
+  // Some gateways HTML-escape the URL (&amp;), producing params like "amp;status".
+  const params = new URLSearchParams()
+  for (const [k, v] of requestUrl.searchParams) params.set(k.replace(/^amp;/, ''), v)
+
+  const status = normalizeStatus(params.get('status'))
   const depositOrderId =
-    requestUrl.searchParams.get('deposit_order_id') ||
-    requestUrl.searchParams.get('zapupi_order_id') ||
-    requestUrl.searchParams.get('our_order_id') ||
+    params.get('deposit_order_id') ||
+    params.get('zapupi_order_id') ||
+    params.get('our_order_id') ||
     ''
 
-  const gatewayOrderId = requestUrl.searchParams.get('order_id') || requestUrl.searchParams.get('txn_id') || ''
-  const utr = requestUrl.searchParams.get('utr') || ''
-  const finalUrl = safeWalletUrl(requestUrl.searchParams.get('return_url'))
+  const gatewayOrderId = params.get('order_id') || params.get('txn_id') || ''
+  const utr = params.get('utr') || ''
+  const finalUrl = safeWalletUrl(params.get('return_url'))
 
   finalUrl.searchParams.set('status', status)
   if (depositOrderId) finalUrl.searchParams.set('zapupi_order_id', depositOrderId)

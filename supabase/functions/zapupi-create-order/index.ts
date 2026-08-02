@@ -138,9 +138,25 @@ function safeReturnUrl(value: unknown, origin: string) {
 }
 
 function gatewayReturnUrl(returnUrl: URL, status: 'success' | 'failed' | 'timeout', orderId: string) {
-  const url = new URL(`${SUPABASE_URL}/functions/v1/zapupi-return`)
+  const url = new URL(`${publicFunctionsBase(returnUrl)}/functions/v1/zapupi-return`)
   url.searchParams.set('status', status)
   url.searchParams.set('deposit_order_id', orderId)
   url.searchParams.set('return_url', returnUrl.toString())
   return url.toString()
+}
+
+// SUPABASE_URL inside self-hosted containers is internal (http://kong:8000),
+// which the user's browser cannot reach. Always use a publicly reachable base.
+function publicFunctionsBase(returnUrl: URL) {
+  const explicit = Deno.env.get('PUBLIC_SUPABASE_URL') || Deno.env.get('PUBLIC_FUNCTIONS_URL')
+  if (explicit) return explicit.replace(/\/+$/, '')
+  try {
+    const base = new URL(SUPABASE_URL)
+    const host = base.hostname.toLowerCase()
+    const internal =
+      host === 'kong' || host === 'localhost' || host === '127.0.0.1' ||
+      host === 'supabase-kong' || host.endsWith('.internal') || !host.includes('.')
+    if (!internal) return base.origin
+  } catch { /* fallback below */ }
+  return returnUrl.origin
 }

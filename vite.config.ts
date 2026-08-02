@@ -20,31 +20,8 @@ export default defineConfig({
   build: {
     // Increase limit to suppress warnings for intentionally large chunks
     chunkSizeWarningLimit: 1000,
-    rollupOptions: {
-      output: {
-        // Manual chunk splitting for better caching
-        manualChunks: {
-          // UI library core
-          "ui-core": [
-            "@radix-ui/react-dialog",
-            "@radix-ui/react-dropdown-menu",
-            "@radix-ui/react-tabs",
-            "@radix-ui/react-toast",
-            "@radix-ui/react-tooltip",
-          ],
-          // Data fetching layer
-          "data-layer": [
-            "@tanstack/react-query",
-            "@supabase/supabase-js",
-          ],
-          // Router
-          "router": ["react-router-dom"],
-          // Charts and heavy UI
-          "charts": ["recharts"],
-          // Date utilities
-          "date-fns": ["date-fns"],
-        },
-      },
-    },
+    // NOTE: manualChunks intentionally NOT used.
+    // Manual chunking causes circular-dependency issues in production
+    // (React.createContext undefined -> black screen). Let Rollup chunk itself.
   },
 });

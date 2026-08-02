@@ -31,6 +31,10 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable --now smm-oxapay-reconcile.timer
-systemctl start smm-oxapay-reconcile.service
+if ! systemctl start smm-oxapay-reconcile.service; then
+  echo "Initial OxaPay reconcile run fail hua; exact log:"
+  journalctl -u smm-oxapay-reconcile.service -n 40 --no-pager || true
+  exit 1
+fi
 ok "OxaPay auto-credit reconciliation enabled (every 2 minutes)"
 systemctl status smm-oxapay-reconcile.service --no-pager || true

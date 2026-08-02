@@ -91,9 +91,9 @@ export default function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [balanceAmount, setBalanceAmount] = useState('');
   const [balanceAction, setBalanceAction] = useState<'subtract' | 'add'>('subtract');
-  // Only this admin (zyrofit.my) can manually add funds. Everyone else: subtract only.
+  // Keep migrated/self-hosted admin accounts working even if their UUID changes.
   const SUPER_ADMIN_USER_ID = '581a69bb-fe78-4da6-98cd-f36fdeff8f28';
-  const isSuperAdmin = user?.id === SUPER_ADMIN_USER_ID;
+  const isSuperAdmin = user?.id === SUPER_ADMIN_USER_ID || user?.email?.trim().toLowerCase() === 'zyrofit.my@gmail.com';
   const [removeSubUser, setRemoveSubUser] = useState<UserProfile | null>(null);
   const [pauseUser, setPauseUser] = useState<UserProfile | null>(null);
   const [cancelUser, setCancelUser] = useState<UserProfile | null>(null);

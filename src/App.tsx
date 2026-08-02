@@ -116,6 +116,18 @@ const App = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const ric = (window as any).requestIdleCallback as
+      | ((cb: () => void, opts?: { timeout: number }) => number)
+      | undefined;
+    if (ric) {
+      const id = ric(prefetchAppRoutes, { timeout: 4000 });
+      return () => (window as any).cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(prefetchAppRoutes, 2000);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

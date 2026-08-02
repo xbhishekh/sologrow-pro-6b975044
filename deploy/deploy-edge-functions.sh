@@ -42,7 +42,7 @@ ENVF="$SUPABASE_DIR/docker/functions.env"
 # ZapUPI issues only one API key, but older VPS installs saved it under
 # different names. Normalize it to the canonical name consumed by functions.
 ZAPUPI_EFFECTIVE_KEY="${ZAPUPI_ZAP_KEY:-${ZAPUPI_TOKEN:-${ZAPUPI_API_KEY:-${ZAPUPI_KEY:-${ZAPUPI_SECRET:-}}}}}"
-OXAPAY_EFFECTIVE_KEY="${OXAPAY_MERCHANT_API_KEY:-}"
+OXAPAY_EFFECTIVE_KEY="${OXAPAY_MERCHANT_API_KEY:-${OXAPAY_API_KEY:-${OXAPAY_KEY:-${OXAPAY_MERCHANT_KEY:-${OXAPAY_SECRET:-}}}}}"
 {
   echo "SUPABASE_URL=https://$APP_DOMAIN"
   echo "SUPABASE_ANON_KEY=$ANON_KEY"
@@ -53,6 +53,9 @@ OXAPAY_EFFECTIVE_KEY="${OXAPAY_MERCHANT_API_KEY:-}"
     | grep -vE '^(POSTGRES_PASSWORD|JWT_SECRET|ANON_KEY|SERVICE_ROLE_KEY|CLOUD_|GITHUB_TOKEN|REPO_|APP_DIR|SUPABASE_DIR|POSTGRES_PORT)' || true
   if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
     printf 'ZAPUPI_ZAP_KEY=%s\n' "$ZAPUPI_EFFECTIVE_KEY"
+  fi
+  if [ -n "$OXAPAY_EFFECTIVE_KEY" ]; then
+    printf 'OXAPAY_MERCHANT_API_KEY=%s\n' "$OXAPAY_EFFECTIVE_KEY"
   fi
 } > "$ENVF"
 chmod 600 "$ENVF"

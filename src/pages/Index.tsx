@@ -200,6 +200,49 @@ const Index = () => {
       </section>
 
       {/* ═══ FEATURES ROW ═══ */}
+      {/* ═══ LIVE STATS BAND ═══ */}
+      <section className="px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto rounded-3xl px-5 py-7 sm:px-10 sm:py-9"
+          style={{ background: C.card, border: `1px solid ${C.line}`, boxShadow: C.softLg }}>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { v: <CountUp to={52480} />, s: 'Orders delivered', icon: Activity },
+              { v: <CountUp to={2400} suffix="+" />, s: 'Active creators', icon: TrendingUp },
+              { v: <CountUp to={99.9} decimals={1} suffix="%" />, s: 'Success rate', icon: Zap },
+              { v: <CountUp to={0} />, s: 'Accounts banned', icon: Shield },
+            ].map((st, i) => (
+              <div key={i} className="text-center">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center mx-auto mb-2.5" style={{ background: C.peach }}>
+                  <st.icon className="w-4 h-4" style={{ color: C.orangeDeep }} />
+                </div>
+                <div className="text-[1.6rem] sm:text-[2.1rem] font-black tracking-tight tabular-nums"
+                  style={{ color: C.ink, fontFamily: "'Outfit', system-ui" }}>{st.v}</div>
+                <div className="text-[11.5px] font-medium mt-1" style={{ color: C.muted }}>{st.s}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* platform marquee */}
+          <div className="mt-8 pt-6 overflow-hidden" style={{ borderTop: `1px solid ${C.line}` }}>
+            <p className="text-center text-[10.5px] font-bold uppercase tracking-[0.18em] mb-4" style={{ color: C.muted }}>
+              Works across every major platform
+            </p>
+            <div className="relative">
+              <div className="flex w-max gap-3 animate-marquee hover:[animation-play-state:paused]">
+                {[...Array(2)].map((_, dup) => (
+                  <React.Fragment key={dup}>
+                    {['Instagram Reels', 'Instagram Posts', 'Instagram Stories', 'YouTube Shorts', 'YouTube Videos', 'TikTok', 'Facebook', 'Twitter / X', 'Spotify', 'Telegram'].map((p) => (
+                      <span key={dup + p} className="whitespace-nowrap px-4 py-2 rounded-xl text-[12.5px] font-semibold"
+                        style={{ background: '#FAFAF7', border: `1px solid ${C.line}`, color: C.ink2 }}>{p}</span>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="features" className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-10">

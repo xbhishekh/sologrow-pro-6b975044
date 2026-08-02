@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AdminGuard } from "@/components/admin/AdminGuard";
@@ -30,28 +30,31 @@ import EngagementOrders from "./pages/EngagementOrders";
 import EngagementOrderDetail from "./pages/EngagementOrderDetail";
 
 // Admin pages
-import Admin from "./pages/admin/Admin";
-import AdminUsers from "./pages/admin/AdminUsers";
-import AdminBundles from "./pages/admin/AdminBundles";
-import AdminCronMonitor from "./pages/admin/AdminCronMonitor";
 
-import AdminDeposits from "./pages/admin/AdminDeposits";
-import AdminProviderAccounts from "./pages/admin/AdminProviderAccounts";
-import AdminServiceProviderMapping from "./pages/admin/AdminServiceProviderMapping";
-import AdminAuditLog from "./pages/admin/AdminAuditLog";
-import AdminOxaPayEvents from "./pages/admin/AdminOxaPayEvents";
-import AdminPopupAd from "./pages/admin/AdminPopupAd";
-import AdminTelegramPopup from "./pages/admin/AdminTelegramPopup";
-import AdminTopupPlan from "./pages/admin/AdminTopupPlan";
 
 // Legal pages
-import TermsOfService from "./pages/legal/TermsOfService";
-import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
-import RefundPolicy from "./pages/legal/RefundPolicy";
-import CookiePolicy from "./pages/legal/CookiePolicy";
-import ContactUs from "./pages/legal/ContactUs";
-import AboutUs from "./pages/legal/AboutUs";
-import ShippingPolicy from "./pages/legal/ShippingPolicy";
+
+
+// Admin + legal pages are code-split (loaded on demand) to keep the main bundle small
+const Admin = lazy(() => import("./pages/admin/Admin"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const AdminBundles = lazy(() => import("./pages/admin/AdminBundles"));
+const AdminCronMonitor = lazy(() => import("./pages/admin/AdminCronMonitor"));
+const AdminDeposits = lazy(() => import("./pages/admin/AdminDeposits"));
+const AdminProviderAccounts = lazy(() => import("./pages/admin/AdminProviderAccounts"));
+const AdminServiceProviderMapping = lazy(() => import("./pages/admin/AdminServiceProviderMapping"));
+const AdminAuditLog = lazy(() => import("./pages/admin/AdminAuditLog"));
+const AdminOxaPayEvents = lazy(() => import("./pages/admin/AdminOxaPayEvents"));
+const AdminPopupAd = lazy(() => import("./pages/admin/AdminPopupAd"));
+const AdminTelegramPopup = lazy(() => import("./pages/admin/AdminTelegramPopup"));
+const AdminTopupPlan = lazy(() => import("./pages/admin/AdminTopupPlan"));
+const TermsOfService = lazy(() => import("./pages/legal/TermsOfService"));
+const PrivacyPolicy = lazy(() => import("./pages/legal/PrivacyPolicy"));
+const RefundPolicy = lazy(() => import("./pages/legal/RefundPolicy"));
+const CookiePolicy = lazy(() => import("./pages/legal/CookiePolicy"));
+const ContactUs = lazy(() => import("./pages/legal/ContactUs"));
+const AboutUs = lazy(() => import("./pages/legal/AboutUs"));
+const ShippingPolicy = lazy(() => import("./pages/legal/ShippingPolicy"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -100,6 +103,7 @@ const App = () => {
               <BrowserRouter>
                 <ScrollToTop />
                 <TelegramJoinPopup />
+                  <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</div>}>
                   <Routes>
                     {/* User pages */}
                     <Route path="/" element={<Index />} />
@@ -142,6 +146,7 @@ const App = () => {
                     <Route path="/about" element={<AboutUs />} />
                     <Route path="/shipping" element={<ShippingPolicy />} />
                   </Routes>
+                  </Suspense>
                 
               </BrowserRouter>
             </AppErrorBoundary>

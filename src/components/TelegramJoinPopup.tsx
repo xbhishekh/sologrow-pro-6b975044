@@ -3,15 +3,41 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Send, Bell, X, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-const TELEGRAM_URL = "https://telegram.me/organicsmmofficial";
 const LAST_SHOWN_KEY = "tg_join_popup_last_shown_v1";
 const SESSION_SHOWN_KEY = "tg_join_popup_session_shown_v1";
-const MIN_GAP_MS = 10 * 60 * 1000; // 10 minutes between popups in the same session
+const DEFAULT_GAP_MIN = 10;
+
+type TgSettings = {
+  enabled: boolean;
+  telegram_url: string;
+  title: string;
+  description: string;
+  note: string;
+  button_text: string;
+  repeat_minutes: number;
+};
 
 export function TelegramJoinPopup() {
   const [open, setOpen] = useState(false);
+  const [cfg, setCfg] = useState<TgSettings | null>(null);
 
   useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from("telegram_popup_settings" as never)
+        .select("*")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (active) setCfg((data as unknown as TgSettings) || null);
+    })();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!cfg?.enabled) { setOpen(false); return; }
+    const MIN_GAP_MS = Math.max(0, cfg.repeat_minutes ?? DEFAULT_GAP_MIN) * 60 * 1000;
     // Rules:
     //  - Force show on every login (SIGNED_IN event) and on every fresh browser/tab session.
     //  - During the same session, re-show every 10 minutes.
@@ -69,7 +95,9 @@ export function TelegramJoinPopup() {
       document.removeEventListener("visibilitychange", onVisibility);
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [cfg]);
+
+  if (!cfg?.enabled) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

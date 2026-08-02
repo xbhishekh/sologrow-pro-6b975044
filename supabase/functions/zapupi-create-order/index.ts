@@ -14,13 +14,13 @@ Deno.serve(async (req) => {
     if (!authHeader?.startsWith('Bearer ')) {
       return json({ error: 'Unauthorized' }, 401)
     }
-    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    })
     const token = authHeader.replace('Bearer ', '')
-    const { data: claims, error: claimsErr } = await userClient.auth.getClaims(token)
-    if (claimsErr || !claims?.claims?.sub) return json({ error: 'Unauthorized' }, 401)
-    const userId = claims.claims.sub as string
+    // Self-hosted GoTrue may not expose the JWKS endpoint required by getClaims().
+    // Verify the token through GoTrue instead; this works for both Cloud and VPS.
+    const authAdmin = createClient(SUPABASE_URL, SERVICE_ROLE)
+    const { data: { user }, error: userErr } = await authAdmin.auth.getUser(token)
+    if (userErr || !user) return json({ error: 'Unauthorized' }, 401)
+    const userId = user.id
 
     const body = await req.json().catch(() => ({}))
     const amount = Number(body?.amount_inr)
@@ -28,6 +28,8 @@ Deno.serve(async (req) => {
       return json({ error: 'Amount must be between ₹50 and ₹100000' }, 400)
     }
     const amountInr = Math.round(amount * 100) / 100
+
+    if (!ZAPUPI_KEY) return json({ error: 'UPI payment gateway is not configured' }, 503)
 
     const origin = safeOrigin(req.headers.get('origin') || (body?.origin as string) || 'https://organicsmm.online')
     const returnBaseUrl = safeReturnUrl(body?.return_url, origin)

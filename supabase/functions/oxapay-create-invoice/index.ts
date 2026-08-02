@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
       email,
       description: `Wallet top-up ₹${amountInr} ($${amountUsd})`,
       return_url: `${returnBase}/wallet?oxapay=success&oxapay_order_id=${orderId}`,
-      callback_url: `${SUPABASE_URL}/functions/v1/oxapay-webhook`,
+      callback_url: `${publicFunctionsBase(returnBase)}/functions/v1/oxapay-webhook`,
     }
 
     const r = await fetch('https://api.oxapay.com/v1/payment/invoice', {

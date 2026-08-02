@@ -3,23 +3,31 @@
 # unko OxaPay API se verify karke credit karta hai.
 #
 # Usage: bash deploy/repair-oxapay-credits.sh [days_back]   (default 14)
-set -euo pipefail
+set -uo pipefail
 cd "$(dirname "$0")/.."
-. "$(dirname "$0")/_common.sh" 2>/dev/null || true
-load_secrets 2>/dev/null || true
+. "$(dirname "$0")/_common.sh"
+load_secrets
 
 DAYS="${1:-14}"
 DB_CONTAINER="${DB_CONTAINER:-supabase-db}"
 KEY="${OXAPAY_MERCHANT_API_KEY:-${OXAPAY_API_KEY:-${OXAPAY_KEY:-}}}"
 [ -n "$KEY" ] || { echo "OXAPAY_MERCHANT_API_KEY missing in /etc/smmpanel.secrets"; exit 1; }
 
-q() { docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -tAq -c "$1"; }
+q() { docker exec -i "$DB_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -tAq -c "$1"; }
 
-rows="$(q "select order_id, coalesce(track_id,''), amount_usd, user_id, amount_inr
+if ! docker ps --format '{{.Names}}' | grep -qx "$DB_CONTAINER"; then
+  echo "database container '$DB_CONTAINER' running nahi hai"
+  exit 1
+fi
+
+if ! rows="$(q "select order_id, coalesce(track_id,''), amount_usd, user_id, amount_inr
            from public.oxapay_deposits
            where credited = false
              and created_at > now() - interval '$DAYS days'
-           order by created_at desc")"
+           order by created_at desc")"; then
+  echo "uncredited deposits database se read nahi ho sake"
+  exit 1
+fi
 
 [ -n "$rows" ] || { echo "koi uncredited deposit nahi mila (last $DAYS din)"; exit 0; }
 
@@ -49,8 +57,14 @@ except Exception: print(0)" 2>/dev/null)"
         echo "  $order  -> $status par amount kam ($paid_amt < $expected), manual check"
         continue
       fi
-      q "update public.oxapay_deposits set status='$status', updated_at=now() where order_id='$order'" >/dev/null
-      out="$(q "select public.credit_wallet_oxapay('$order')")"
+      if ! q "update public.oxapay_deposits set status='$status', updated_at=now() where order_id='$order'" >/dev/null; then
+        echo "  $order  -> status update fail, next payment check kar raha hoon"
+        continue
+      fi
+      if ! out="$(q "select public.credit_wallet_oxapay('$order')")"; then
+        echo "  $order  -> wallet credit fail, next payment check kar raha hoon"
+        continue
+      fi
       echo "  $order  -> CREDITED  $out"
       if printf '%s' "$out" | grep -q '"credited"[[:space:]]*:[[:space:]]*true'; then
         notify_payload="$(python3 -c 'import json,sys; print(json.dumps({"user_id":sys.argv[1],"order_id":sys.argv[2],"method":"OxaPay","status":"success","amount_inr":float(sys.argv[3]),"amount_usd":float(sys.argv[4])}))' "$user_id" "$order" "$amount_inr" "$expected")"
@@ -67,7 +81,10 @@ except Exception: print(0)" 2>/dev/null)"
       fi
       ;;
     *)
-      [ -n "$status" ] && q "update public.oxapay_deposits set status='$status', updated_at=now() where order_id='$order'" >/dev/null
+      if [ -n "$status" ]; then
+        q "update public.oxapay_deposits set status='$status', updated_at=now() where order_id='$order'" >/dev/null \
+          || echo "  $order  -> status save warning"
+      fi
       echo "  $order  -> $status (credit nahi)"
       ;;
   esac

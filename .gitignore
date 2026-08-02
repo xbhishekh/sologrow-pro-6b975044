@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# deploy secrets
+*.secrets
+deploy/secrets.local
+/opt/migration

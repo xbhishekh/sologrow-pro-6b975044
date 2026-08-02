@@ -32,8 +32,8 @@ type HealthResult = {
 export function ZapUpiWebhookHealthCard() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<HealthResult | null>(null);
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const canonicalUrl = `https://${projectId}.supabase.co/functions/v1/zapupi-webhook`;
+  const baseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, '') || '';
+  const canonicalUrl = `${baseUrl}/functions/v1/zapupi-webhook`;
 
   const runCheck = async () => {
     setLoading(true);

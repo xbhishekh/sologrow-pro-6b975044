@@ -26,6 +26,65 @@ const Pill: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </span>
 );
 
+// ── Live activity ticker ──────────────────────────────────────────
+const ACTIVITY = [
+  { t: 'Instagram Reel', q: '12,500 views', c: '#3B82F6', city: 'Mumbai' },
+  { t: 'YouTube Short', q: '4,200 views', c: '#EF4444', city: 'Delhi' },
+  { t: 'Instagram Post', q: '1,800 likes', c: '#EC4899', city: 'Dubai' },
+  { t: 'TikTok Video', q: '9,000 views', c: '#0B0B12', city: 'London' },
+  { t: 'Instagram Reel', q: '640 shares', c: '#10B981', city: 'Bengaluru' },
+  { t: 'Instagram Story', q: '2,300 views', c: '#8B5CF6', city: 'Toronto' },
+];
+
+const LiveTicker: React.FC = () => {
+  const [i, setI] = React.useState(0);
+  React.useEffect(() => {
+    const id = setInterval(() => setI((v) => (v + 1) % ACTIVITY.length), 3200);
+    return () => clearInterval(id);
+  }, []);
+  const a = ACTIVITY[i];
+  return (
+    <div className="flex justify-center px-4 mt-4">
+      <div key={i} className="inline-flex items-center gap-2.5 pl-2.5 pr-3.5 py-1.5 rounded-full animate-fade-in max-w-full"
+        style={{ background: 'rgba(255,255,255,.85)', border: `1px solid ${C.line}`, boxShadow: C.soft }}>
+        <span className="relative flex h-2 w-2 shrink-0">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#10B981' }} />
+          <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#10B981' }} />
+        </span>
+        <span className="text-[11.5px] sm:text-[12.5px] font-medium truncate" style={{ color: C.ink2 }}>
+          <strong style={{ color: a.c }}>{a.q}</strong> delivering to a {a.t} · {a.city}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// ── Count-up number ───────────────────────────────────────────────
+const CountUp: React.FC<{ to: number; suffix?: string; decimals?: number }> = ({ to, suffix = '', decimals = 0 }) => {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  const [val, setVal] = React.useState(0);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let raf = 0;
+    const io = new IntersectionObserver((entries) => {
+      if (!entries[0].isIntersecting) return;
+      io.disconnect();
+      const start = performance.now();
+      const dur = 1400;
+      const tick = (now: number) => {
+        const p = Math.min((now - start) / dur, 1);
+        setVal(to * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }, { threshold: 0.3 });
+    io.observe(el);
+    return () => { io.disconnect(); cancelAnimationFrame(raf); };
+  }, [to]);
+  return <span ref={ref}>{val.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}</span>;
+};
+
 const Index = () => {
   return (
     <div className="min-h-screen w-full overflow-x-hidden" style={{ background: C.bg, color: C.ink, fontFamily: "'Inter', system-ui, sans-serif" }}>

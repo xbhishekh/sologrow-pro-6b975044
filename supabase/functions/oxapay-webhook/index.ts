@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { notifyDepositDirect } from '../_shared/deposit-notification.ts'
 
 const OXAPAY_KEY = (Deno.env.get('OXAPAY_MERCHANT_API_KEY') || '').trim()
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -141,21 +142,17 @@ Deno.serve(async (req) => {
       .maybeSingle()
     const isFailed = !isPaid && status && ['failed','expired','cancelled','canceled','underpaid'].includes(status)
     if (dep?.user_id && (creditResult?.credited || isFailed)) {
-      await fetch(`${SUPABASE_URL}/functions/v1/notify-deposit-status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}` },
-        body: JSON.stringify({
-          user_id: dep.user_id,
-          order_id: orderId,
-          method: 'OxaPay',
-          status: creditResult?.credited ? 'success' : 'failed',
-          amount_inr: dep.amount_inr,
-          amount_usd: dep.amount_usd,
-          reason: isFailed ? status : undefined,
-        }),
-      }).catch(() => {})
+      await notifyDepositDirect(admin, {
+        userId: dep.user_id,
+        orderId,
+        method: 'OxaPay',
+        status: creditResult?.credited ? 'success' : 'failed',
+        amountInr: dep.amount_inr,
+        amountUsd: dep.amount_usd,
+        reason: isFailed ? status ?? undefined : undefined,
+      })
     }
-  } catch (_) { /* ignore notify errors */ }
+  } catch (error) { console.error('OxaPay deposit notification failed', error) }
 
   return new Response('ok', { status: 200 })
 })

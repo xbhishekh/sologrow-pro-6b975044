@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { notifyDepositDirect } from '../_shared/deposit-notification.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -81,7 +82,9 @@ Deno.serve(async (req) => {
     })
     if (error) return json({ error: error.message }, 500)
     if ((data as any)?.credited && !(data as any)?.duplicate) {
-      await notifyDeposit(userId, orderId, dep.amount_inr).catch((e) => console.error('deposit notify', e))
+      await notifyDepositDirect(admin, {
+        userId, orderId, method: 'ZapUPI', status: 'success', amountInr: dep.amount_inr,
+      }).catch((e) => console.error('deposit notify', e))
     }
     return json({ credited: true, result: data })
   } catch (e) {
@@ -242,19 +245,4 @@ async function notifyTelegram(admin: any, orderId: string) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}` },
     body: JSON.stringify({ message: msg, parse_mode: 'HTML' }),
   })
-}
-
-async function notifyDeposit(userId: string, orderId: string, amountInr: number) {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/notify-deposit-status`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}` },
-    body: JSON.stringify({
-      user_id: userId,
-      order_id: orderId,
-      method: 'ZapUPI',
-      status: 'success',
-      amount_inr: amountInr,
-    }),
-  })
-  if (!response.ok) throw new Error(`notify-deposit-status returned ${response.status}: ${await response.text()}`)
 }

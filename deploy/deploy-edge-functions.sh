@@ -39,6 +39,9 @@ ok "$(ls -1 "$FN_DST" | wc -l) functions staged"
 
 log "secrets -> edge runtime env file"
 ENVF="$SUPABASE_DIR/docker/functions.env"
+# ZapUPI issues only one API key, but older VPS installs saved it under
+# different names. Normalize it to the canonical name consumed by functions.
+ZAPUPI_EFFECTIVE_KEY="${ZAPUPI_ZAP_KEY:-${ZAPUPI_TOKEN:-${ZAPUPI_API_KEY:-${ZAPUPI_KEY:-${ZAPUPI_SECRET:-}}}}}"
 {
   echo "SUPABASE_URL=https://$APP_DOMAIN"
   echo "SUPABASE_ANON_KEY=$ANON_KEY"
@@ -47,9 +50,17 @@ ENVF="$SUPABASE_DIR/docker/functions.env"
   # app/provider secrets: sab non-Supabase keys /etc/smmpanel.secrets se
   grep -E '^[A-Z0-9_]+=' "$SECRETS_FILE" \
     | grep -vE '^(POSTGRES_PASSWORD|JWT_SECRET|ANON_KEY|SERVICE_ROLE_KEY|CLOUD_|GITHUB_TOKEN|REPO_|APP_DIR|SUPABASE_DIR|POSTGRES_PORT)' || true
+  if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
+    printf 'ZAPUPI_ZAP_KEY=%s\n' "$ZAPUPI_EFFECTIVE_KEY"
+  fi
 } > "$ENVF"
 chmod 600 "$ENVF"
 ok "$(wc -l < "$ENVF") env vars"
+if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
+  ok "ZapUPI API key configured"
+else
+  log "WARNING: ZapUPI API key is missing in $SECRETS_FILE"
+fi
 
 log "compose override for functions env"
 cd "$SUPABASE_DIR/docker"
@@ -61,8 +72,18 @@ if 'functions:' not in s:
     s += "  functions:\n    env_file:\n      - ./functions.env\n"
 open(p,'w').write(s)
 PY
-docker compose up -d functions
+# `docker compose up` does not recreate an existing container when only the
+# env_file contents change. Force recreation so rotated/added keys are loaded.
+docker compose up -d --force-recreate functions
 sleep 5
+FUNCTIONS_CONTAINER_ID="$(docker compose ps -q functions)"
+[ -n "$FUNCTIONS_CONTAINER_ID" ] || die "functions container nahi mila"
+if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
+  docker inspect "$FUNCTIONS_CONTAINER_ID" --format '{{range .Config.Env}}{{println .}}{{end}}' \
+    | grep -q '^ZAPUPI_ZAP_KEY=.' \
+    || die "ZapUPI API key functions container me load nahi hui"
+  ok "ZapUPI API key edge runtime me loaded"
+fi
 ok "edge runtime restarted"
 
 log "smoke test"

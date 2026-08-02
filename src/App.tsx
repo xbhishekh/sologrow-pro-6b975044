@@ -41,6 +41,7 @@ import AdminServiceProviderMapping from "./pages/admin/AdminServiceProviderMappi
 import AdminAuditLog from "./pages/admin/AdminAuditLog";
 import AdminOxaPayEvents from "./pages/admin/AdminOxaPayEvents";
 import AdminPopupAd from "./pages/admin/AdminPopupAd";
+import AdminTelegramPopup from "./pages/admin/AdminTelegramPopup";
 import AdminTopupPlan from "./pages/admin/AdminTopupPlan";
 
 // Legal pages
@@ -129,6 +130,7 @@ const App = () => {
                     <Route path="/admin/audit-log" element={<AdminGuard><AdminAuditLog /></AdminGuard>} />
                     <Route path="/admin/oxapay-events" element={<AdminGuard><AdminOxaPayEvents /></AdminGuard>} />
                     <Route path="/admin/popup-ad" element={<AdminGuard><AdminPopupAd /></AdminGuard>} />
+                    <Route path="/admin/telegram-popup" element={<AdminGuard><AdminTelegramPopup /></AdminGuard>} />
                     <Route path="/admin/topup-plan" element={<AdminGuard><AdminTopupPlan /></AdminGuard>} />
 
                     {/* Legal */}

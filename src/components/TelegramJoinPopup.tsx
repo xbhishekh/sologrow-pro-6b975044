@@ -3,15 +3,41 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Send, Bell, X, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-const TELEGRAM_URL = "https://telegram.me/organicsmmofficial";
 const LAST_SHOWN_KEY = "tg_join_popup_last_shown_v1";
 const SESSION_SHOWN_KEY = "tg_join_popup_session_shown_v1";
-const MIN_GAP_MS = 10 * 60 * 1000; // 10 minutes between popups in the same session
+const DEFAULT_GAP_MIN = 10;
+
+type TgSettings = {
+  enabled: boolean;
+  telegram_url: string;
+  title: string;
+  description: string;
+  note: string;
+  button_text: string;
+  repeat_minutes: number;
+};
 
 export function TelegramJoinPopup() {
   const [open, setOpen] = useState(false);
+  const [cfg, setCfg] = useState<TgSettings | null>(null);
 
   useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from("telegram_popup_settings" as never)
+        .select("*")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (active) setCfg((data as unknown as TgSettings) || null);
+    })();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!cfg?.enabled) { setOpen(false); return; }
+    const MIN_GAP_MS = Math.max(0, cfg.repeat_minutes ?? DEFAULT_GAP_MIN) * 60 * 1000;
     // Rules:
     //  - Force show on every login (SIGNED_IN event) and on every fresh browser/tab session.
     //  - During the same session, re-show every 10 minutes.
@@ -69,7 +95,9 @@ export function TelegramJoinPopup() {
       document.removeEventListener("visibilitychange", onVisibility);
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [cfg]);
+
+  if (!cfg?.enabled) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -122,36 +150,28 @@ export function TelegramJoinPopup() {
               </span>
 
               <h3 className="text-xl sm:text-2xl font-extrabold text-white leading-tight tracking-tight mb-2">
-                Join Our Official Telegram Channel
+                {cfg.title}
               </h3>
 
               <p className="text-sm text-slate-300/90 leading-relaxed mb-4">
-                Our users have been earning really well with OrganicSMM, and because
-                of that a few competitors have been trying to{" "}
-                <span className="font-semibold text-white">attack the site</span>.
-                Nothing to worry about — everything is running{" "}
-                <span className="font-semibold text-white">safe and smooth</span>.
+                {cfg.description}
               </p>
 
               <div className="w-full rounded-2xl bg-emerald-500/5 ring-1 ring-emerald-400/15 p-3 mb-5 text-left">
                 <p className="text-[13px] text-slate-200 leading-relaxed">
-                  📢 Just as a precaution, please join our{" "}
-                  <span className="font-bold text-emerald-300">
-                    official Telegram channel
-                  </span>{" "}
-                  so you never miss any updates, offers, or important announcements.
+                  {cfg.note}
                 </p>
               </div>
 
               {/* CTA */}
               <a
-                href={TELEGRAM_URL}
+                href={cfg.telegram_url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group w-full inline-flex items-center justify-center gap-2 h-12 rounded-2xl text-sm font-bold uppercase tracking-wider text-white bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 ring-1 ring-white/25 shadow-lg shadow-emerald-500/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
                 <Send className="w-4 h-4" />
-                Join Telegram Channel
+                {cfg.button_text}
                 <ExternalLink className="w-3.5 h-3.5 opacity-80" />
               </a>
 

@@ -1334,6 +1334,45 @@ export type Database = {
           },
         ]
       }
+      telegram_popup_settings: {
+        Row: {
+          button_text: string
+          created_at: string
+          description: string
+          enabled: boolean
+          id: string
+          note: string
+          repeat_minutes: number
+          telegram_url: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          button_text?: string
+          created_at?: string
+          description?: string
+          enabled?: boolean
+          id?: string
+          note?: string
+          repeat_minutes?: number
+          telegram_url?: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          button_text?: string
+          created_at?: string
+          description?: string
+          enabled?: boolean
+          id?: string
+          note?: string
+          repeat_minutes?: number
+          telegram_url?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number

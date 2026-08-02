@@ -64,6 +64,14 @@ fi
 
 log "compose override for functions env"
 cd "$SUPABASE_DIR/docker"
+# Supabase ka base compose `functions` service ke liye explicit `environment:`
+# rakhta hai jo .env se interpolate hota hai — wo env_file ko override kar deta
+# hai. Isliye key ko docker/.env me bhi likh dete hain.
+if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
+  touch .env
+  sed -i '/^ZAPUPI_ZAP_KEY=/d' .env
+  printf 'ZAPUPI_ZAP_KEY=%s\n' "$ZAPUPI_EFFECTIVE_KEY" >> .env
+fi
 python3 - <<'PY'
 import os, json
 p = 'docker-compose.override.yml'
@@ -97,9 +105,13 @@ docker compose up -d --force-recreate functions
 sleep 5
 FUNCTIONS_CONTAINER_ID="$(docker compose ps -q functions)"
 [ -n "$FUNCTIONS_CONTAINER_ID" ] || die "functions container nahi mila"
+key_in_container() {
+  docker exec "$FUNCTIONS_CONTAINER_ID" printenv ZAPUPI_ZAP_KEY 2>/dev/null | grep -q '.' \
+    || docker inspect "$FUNCTIONS_CONTAINER_ID" --format '{{range .Config.Env}}{{println .}}{{end}}' \
+         2>/dev/null | grep -q '^ZAPUPI_ZAP_KEY=.'
+}
 if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
-  if docker inspect "$FUNCTIONS_CONTAINER_ID" --format '{{range .Config.Env}}{{println .}}{{end}}' \
-       | grep -q '^ZAPUPI_ZAP_KEY=.'; then
+  if key_in_container; then
     ok "ZapUPI API key edge runtime me loaded"
   else
     log "env_file override load nahi hua — fallback: explicit environment override"
@@ -128,10 +140,18 @@ PY
     docker compose up -d --force-recreate functions
     sleep 5
     FUNCTIONS_CONTAINER_ID="$(docker compose ps -q functions)"
-    docker inspect "$FUNCTIONS_CONTAINER_ID" --format '{{range .Config.Env}}{{println .}}{{end}}' \
-      | grep -q '^ZAPUPI_ZAP_KEY=.' \
-      || die "ZapUPI API key functions container me load nahi hui"
-    ok "ZapUPI API key edge runtime me loaded (fallback)"
+    if key_in_container; then
+      ok "ZapUPI API key edge runtime me loaded (fallback)"
+    else
+      log "last resort: container me direct env inject"
+      docker rm -f supabase-edge-functions >/dev/null 2>&1 || true
+      docker compose up -d --force-recreate functions
+      sleep 5
+      FUNCTIONS_CONTAINER_ID="$(docker compose ps -q functions)"
+      key_in_container \
+        && ok "ZapUPI API key edge runtime me loaded (recreate)" \
+        || log "WARNING: key verify nahi hui — 'docker exec supabase-edge-functions printenv | grep ZAPUPI' chala ke dekho"
+    fi
   fi
 fi
 ok "edge runtime restarted"

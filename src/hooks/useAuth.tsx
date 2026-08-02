@@ -201,9 +201,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (signInRes.error) {
         // Not fatal — account exists but requires email confirmation.
         console.warn('--- useAuth: post-signup signIn ---', signInRes.error.message);
+        const msg = signInRes.error.message.toLowerCase();
+        if (msg.includes('email not confirmed')) {
+          return { error: null, needsEmailConfirmation: true };
+        }
       }
 
-      return { error: null };
+      return { error: null, needsEmailConfirmation: false };
     } catch (error) {
       console.error('--- useAuth: signUp catch ---', error);
       return { error: error as Error };

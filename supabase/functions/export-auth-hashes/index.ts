@@ -43,10 +43,11 @@ Deno.serve(async (req) => {
 
   for (const u of rows) {
     out.push(
+      // NOTE: confirmed_at is a GENERATED column in self-hosted Postgres -> never insert it.
       `INSERT INTO auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
   raw_app_meta_data, raw_user_meta_data, created_at, updated_at, phone,
-  confirmed_at, last_sign_in_at, is_sso_user, is_anonymous
+  last_sign_in_at, is_sso_user, is_anonymous
 ) VALUES (
   '00000000-0000-0000-0000-000000000000',
   ${sqlLiteral(u.id)}::uuid,
@@ -59,7 +60,6 @@ Deno.serve(async (req) => {
   ${sqlLiteral(u.created_at)}::timestamptz,
   ${sqlLiteral(u.updated_at)}::timestamptz,
   ${sqlLiteral(u.phone)},
-  ${sqlLiteral(u.confirmed_at)}::timestamptz,
   ${sqlLiteral(u.last_sign_in_at)}::timestamptz,
   false, false
 )

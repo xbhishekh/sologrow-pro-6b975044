@@ -25,6 +25,8 @@ vpsql -c "grant usage on schema public to anon, authenticated, service_role;" >/
 ok "roles/extensions ready"
 
 log "1/6 auth users + bcrypt passwords (schema data pehle, FK ke liye)"
+# safety: purane export me confirmed_at aata tha jo self-host me GENERATED column hai -> strip
+sed -i '/^  confirmed_at, last_sign_in_at, is_sso_user, is_anonymous$/s//  last_sign_in_at, is_sso_user, is_anonymous/' "$OUT/auth-users.sql"
 vpsql_file_soft "$OUT/auth-users.sql" > /tmp/import_auth.log 2>&1 || true
 echo "  auth errors: $(grep -c '^ERROR' /tmp/import_auth.log || true) (/tmp/import_auth.log)"
 vpsql -Atc "select count(*)||' auth.users' from auth.users;"
@@ -38,11 +40,34 @@ done
 echo "  schema errors: $(grep -c '^ERROR' /tmp/import_schema.log || true) (already-exists normal, /tmp/import_schema.log)"
 ok "schema applied"
 
-log "3/6 data import (triggers OFF)"
+log "3/6 data import (triggers OFF) + missing-column auto-heal"
 { echo "set session_replication_role='replica';"; cat "$OUT/cloud-data.sql"; } > /tmp/_data_load.sql
-vpsql_file_soft /tmp/_data_load.sql > /tmp/import_data.log 2>&1 || true
+for pass in 1 2 3; do
+  vpsql_file_soft /tmp/_data_load.sql > /tmp/import_data.log 2>&1 || true
+  errs=$(grep -c '^ERROR' /tmp/import_data.log || true)
+  echo "  pass $pass -> data errors: $errs"
+  [ "$errs" = "0" ] && break
+  # cloud schema me naye columns ho sakte hain jo repo migrations me nahi -> add karo
+  : > /tmp/_addcols.sql
+  grep -oE 'column "[^"]+" of relation "[^"]+" does not exist' /tmp/import_data.log \
+    | sed -E 's/column "([^"]+)" of relation "([^"]+)".*/\2 \1/' | sort -u | while read -r tbl col; do
+      case "$col" in
+        *_at)                    typ="timestamptz" ;;
+        is_*|has_*|*_enabled)    typ="boolean" ;;
+        *_count|*_percent|*_amount|*_price|*quantity*) typ="numeric" ;;
+        *_data|*_json|*_meta|*_response) typ="jsonb" ;;
+        *)                       typ="text" ;;
+      esac
+      echo "ALTER TABLE public.\"$tbl\" ADD COLUMN IF NOT EXISTS \"$col\" $typ;" >> /tmp/_addcols.sql
+    done
+  if [ -s /tmp/_addcols.sql ]; then
+    echo "  adding missing columns: $(wc -l < /tmp/_addcols.sql)"
+    vpsql_file_soft /tmp/_addcols.sql >/dev/null 2>&1 || true
+  else
+    break
+  fi
+done
 rm -f /tmp/_data_load.sql
-echo "  data errors: $(grep -c '^ERROR' /tmp/import_data.log || true) (/tmp/import_data.log)"
 ok "data imported"
 
 log "4/6 sequences resync"

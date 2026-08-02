@@ -1,19 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { tgCall, tgWebhookSecret } from "../_shared/telegram.ts";
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
 );
-
-async function deriveWebhookSecret(apiKey: string): Promise<string> {
-  const data = new TextEncoder().encode(`telegram-webhook:${apiKey}`);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
 
 function safeEqual(a: string | null, b: string): boolean {
   if (!a || a.length !== b.length) return false;
@@ -23,19 +16,7 @@ function safeEqual(a: string | null, b: string): boolean {
 }
 
 async function tg(path: string, body: Record<string, unknown>) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  const TELEGRAM_API_KEY = Deno.env.get("TELEGRAM_API_KEY");
-  if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) throw new Error("Telegram connector not configured");
-  const res = await fetch(`${GATEWAY_URL}/${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "X-Connection-Api-Key": TELEGRAM_API_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  return await res.json();
+  return await tgCall(path, body);
 }
 
 async function getUsdToInr(): Promise<number> {
@@ -143,10 +124,7 @@ serve(async (req) => {
   }
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
-  const TELEGRAM_API_KEY = Deno.env.get("TELEGRAM_API_KEY");
-  if (!TELEGRAM_API_KEY) return new Response("Not configured", { status: 500 });
-
-  const expected = await deriveWebhookSecret(TELEGRAM_API_KEY);
+  const expected = await tgWebhookSecret();
   const actual = req.headers.get("X-Telegram-Bot-Api-Secret-Token");
   if (!safeEqual(actual, expected)) {
     return new Response("Unauthorized", { status: 401 });

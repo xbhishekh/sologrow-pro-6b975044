@@ -87,7 +87,17 @@ export default function ZapUpiDepositCard() {
           return_url: buildReturnUrl(),
         },
       });
-      if (error) throw new Error(error.message || 'Failed to create order');
+      if (error) {
+        const response = (error as { context?: Response }).context;
+        let message = error.message || 'Failed to create order';
+        if (response) {
+          try {
+            const payload = await response.clone().json() as { error?: string; detail?: string };
+            message = payload.error || payload.detail || message;
+          } catch { /* use SDK error */ }
+        }
+        throw new Error(message);
+      }
       const payUrl = (data as any)?.payment_url;
       if (!payUrl) throw new Error('Gateway did not return a payment URL');
       openPaymentPage(payUrl);

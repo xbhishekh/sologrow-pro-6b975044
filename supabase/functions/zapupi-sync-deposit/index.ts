@@ -4,7 +4,6 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 const ZAPUPI_KEY = Deno.env.get('ZAPUPI_ZAP_KEY')!
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -12,13 +11,11 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) return json({ error: 'Unauthorized' }, 401)
-    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    })
     const token = authHeader.replace('Bearer ', '')
-    const { data: claims, error: claimsErr } = await userClient.auth.getClaims(token)
-    if (claimsErr || !claims?.claims?.sub) return json({ error: 'Unauthorized' }, 401)
-    const userId = claims.claims.sub as string
+    const authAdmin = createClient(SUPABASE_URL, SERVICE_ROLE)
+    const { data: { user }, error: userErr } = await authAdmin.auth.getUser(token)
+    if (userErr || !user) return json({ error: 'Unauthorized' }, 401)
+    const userId = user.id
 
     const body = await req.json().catch(() => ({}))
     const orderId: string | undefined = body?.order_id

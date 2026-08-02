@@ -70,6 +70,11 @@ if [ -n "$OXAPAY_EFFECTIVE_KEY" ]; then
 else
   log "WARNING: OxaPay merchant API key is missing in $SECRETS_FILE"
 fi
+if grep -q '^TELEGRAM_BOT_TOKEN=.' "$ENVF" && grep -q '^TELEGRAM_CHAT_ID=.' "$ENVF"; then
+  ok "Telegram bot token aur admin chat ID configured"
+else
+  log "WARNING: TELEGRAM_BOT_TOKEN ya TELEGRAM_CHAT_ID missing hai; payment alerts nahi aayenge"
+fi
 
 log "compose override for functions env"
 cd "$SUPABASE_DIR/docker"
@@ -149,6 +154,12 @@ if [ -n "$OXAPAY_EFFECTIVE_KEY" ]; then
   else
     die "OxaPay key functions container me load nahi hui; merged compose config check karo"
   fi
+fi
+if docker exec "$FUNCTIONS_CONTAINER_ID" printenv TELEGRAM_BOT_TOKEN 2>/dev/null | grep -q '.' \
+  && docker exec "$FUNCTIONS_CONTAINER_ID" printenv TELEGRAM_CHAT_ID 2>/dev/null | grep -q '.'; then
+  ok "Telegram settings edge runtime me loaded"
+else
+  die "Telegram bot token/chat ID functions container me load nahi hua"
 fi
 ok "edge runtime restarted"
 

@@ -461,6 +461,28 @@ export default function Admin() {
             </Card>
           </Link>
 
+          <Link to="/admin/telegram-popup">
+            <Card className="glass-card h-full hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-500/10 transition-all cursor-pointer group border-2 border-emerald-500/30">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500/30 to-green-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Megaphone className="h-6 w-6 text-emerald-500" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold group-hover:text-emerald-500 transition-colors">
+                        Telegram Popup
+                      </h3>
+                      <Badge className="text-[10px] h-4 px-1.5 bg-emerald-500 text-white">NEW</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Join Telegram popup ON/OFF &amp; text</p>
+                  </div>
+                  <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
         </div>
       </div>
     </DashboardLayout>

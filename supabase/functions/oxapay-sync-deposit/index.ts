@@ -36,7 +36,12 @@ Deno.serve(async (req) => {
     if (dep.user_id !== userId) return json({ error: 'Forbidden' }, 403)
     if (dep.credited) return json({ credited: false, already: true })
 
-    // Poll OxaPay for latest state. Never credit here — that only happens in webhook.
+    // Poll OxaPay for latest state directly from their API (server-to-server,
+    // authenticated with the merchant key). If the gateway itself says the
+    // invoice is paid, we credit here too — the webhook may never arrive on a
+    // self-hosted setup (firewall / wrong callback URL).
+    let remotePaid = false
+    let remoteAmountOk = true
     if (dep.track_id) {
       try {
         const r = await fetch(`https://api.oxapay.com/v1/payment/${dep.track_id}`, {
@@ -47,6 +52,12 @@ Deno.serve(async (req) => {
         try { data = JSON.parse(txt) } catch { data = { raw: txt } }
         const inner = data?.data ?? data
         const remoteStatus = String(inner?.status || '').toLowerCase()
+        remotePaid = ['paid', 'confirmed', 'completed', 'success'].includes(remoteStatus)
+        const paidAmt = Number(inner?.amount ?? inner?.paid_amount ?? inner?.received_amount)
+        const expectedUsd = Number(dep.amount_usd)
+        if (remotePaid && Number.isFinite(paidAmt) && Number.isFinite(expectedUsd) && expectedUsd > 0) {
+          remoteAmountOk = paidAmt >= expectedUsd * 0.98
+        }
         if (remoteStatus) {
           await admin.from('oxapay_deposits').update({
             status: remoteStatus,
@@ -57,15 +68,21 @@ Deno.serve(async (req) => {
       } catch { /* ignore polling errors */ }
     }
 
+    let credited = false
+    if (remotePaid && remoteAmountOk) {
+      const { data: res } = await admin.rpc('credit_wallet_oxapay', { p_order_id: orderId })
+      credited = !!(res as any)?.credited
+    }
+
     // Re-read
     const { data: fresh } = await admin.from('oxapay_deposits')
       .select('status,credited').eq('order_id', orderId).maybeSingle()
 
     return json({
-      credited: false,
+      credited,
       already: !!fresh?.credited,
       status: fresh?.status || dep.status,
-      awaiting: 'signed_webhook',
+      awaiting: fresh?.credited ? undefined : 'payment_confirmation',
     })
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500)

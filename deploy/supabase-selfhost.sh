@@ -73,11 +73,11 @@ ok "stack up"
 
 log "health wait"
 for i in $(seq 1 60); do
-  if PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -p "$POSTGRES_PORT" -U postgres -d postgres -c 'select 1' >/dev/null 2>&1; then break; fi
+  if vpsql -c 'select 1' >/dev/null 2>&1; then break; fi
   sleep 2
 done
-vpsql -c 'select version();' >/dev/null || die "Postgres reachable nahi hai 127.0.0.1:$POSTGRES_PORT"
-ok "Postgres OK on 127.0.0.1:$POSTGRES_PORT"
+vpsql -c 'select version();' >/dev/null || die "Postgres reachable nahi hai (container: ${DB_CONTAINER:-supabase-db})"
+ok "Postgres OK (via db container)"
 curl -fsS -o /dev/null "http://127.0.0.1:8000/rest/v1/" -H "apikey: $ANON_KEY" && ok "Kong+PostgREST OK :8000" || log "Kong warm-up ho raha hai, 30s baad dobara check karna"
 
 log "frontend .env update"
@@ -89,4 +89,4 @@ VITE_SUPABASE_PROJECT_ID=selfhosted
 ENV
 ok "$APP_DIR/.env written (anon key auto)"
 
-log "PHASE 2 complete. Next: bash deploy/export-cloud-data.sh"
+log "PHASE 2 complete. Next: bash deploy/import-all.sh"

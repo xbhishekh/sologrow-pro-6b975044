@@ -12,8 +12,8 @@ jq -e 'type == "array" and length > 0' "$AUTH_DUMP" >/dev/null \
   || die "$AUTH_DUMP is not a valid non-empty user export"
 
 log "Loading original password hashes"
-vpsql -c "create temporary table _login_repair(j jsonb) on commit preserve rows;" >/dev/null
-jq -c '.[]' "$AUTH_DUMP" | vpsql -c "copy _login_repair(j) from stdin;" >/dev/null
+vpsql -c "drop table if exists public._login_repair; create unlogged table public._login_repair(j jsonb); revoke all on public._login_repair from public, anon, authenticated;" >/dev/null
+jq -c '.[]' "$AUTH_DUMP" | vpsql -c "copy public._login_repair(j) from stdin;" >/dev/null
 
 log "Repairing users and email identities"
 vpsql <<'SQL'
@@ -35,7 +35,7 @@ set email = lower(btrim(coalesce(nullif(r.j->>'email', ''), u.email))),
     raw_user_meta_data = coalesce(u.raw_user_meta_data, '{}'::jsonb),
     is_sso_user = false,
     updated_at = now()
-from _login_repair r
+from public._login_repair r
 where u.id = (r.j->>'id')::uuid;
 
 -- Keep the email identity in sync; password login depends on this relation.
@@ -70,6 +70,8 @@ on conflict (provider_id, provider) do nothing;
 
 commit;
 SQL
+
+vpsql -c "drop table public._login_repair;" >/dev/null
 
 log "Login repair verification"
 vpsql -Atc "select count(*)||' total users' from auth.users;"

@@ -9,7 +9,8 @@ const corsHeaders = {
 const INR_RATE = 90;
 // Only THIS admin user can manually add funds. Everyone else (admin or not) is blocked.
 // Funds otherwise come exclusively from successful ZapUPI payments.
-const SUPER_ADMIN_USER_ID = "581a69bb-fe78-4da6-98cd-f36fdeff8f28"; // zyrofit.my@gmail.com
+const SUPER_ADMIN_USER_ID = "581a69bb-fe78-4da6-98cd-f36fdeff8f28"; // legacy Lovable user id
+const SUPER_ADMIN_EMAIL = "zyrofit.my@gmail.com";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -31,12 +32,20 @@ Deno.serve(async (req) => {
     const { data: { user }, error: userErr } = await admin.auth.getUser(token);
     if (userErr || !user) return json({ error: "Invalid token" }, 401);
 
-    // Admin role check
-    const { data: isAdmin } = await admin.rpc("has_role", {
-      _user_id: user.id,
-      _role: "admin",
-    });
-    if (!isAdmin) return json({ error: "Forbidden — admins only" }, 403);
+    // Check the role row directly. This remains compatible with self-hosted
+    // databases where an older/mismatched has_role RPC may return false.
+    const { data: adminRole, error: roleError } = await admin
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .limit(1)
+      .maybeSingle();
+    if (roleError) {
+      console.error("admin role lookup failed", roleError);
+      return json({ error: "Unable to verify admin role" }, 500);
+    }
+    if (!adminRole) return json({ error: "Forbidden — admins only" }, 403);
 
     const body = await req.json();
     const { target_user_id, action, inr_amount, notes, transaction_id } = body ?? {};
@@ -50,7 +59,9 @@ Deno.serve(async (req) => {
 
     // 🔒 Manual `add` and `subtract` are allowed ONLY for the super-admin (zyrofit.my).
     // All other admins are blocked from any wallet balance mutation.
-    if ((action === "add" || action === "subtract") && user.id !== SUPER_ADMIN_USER_ID) {
+    const isSuperAdmin = user.id === SUPER_ADMIN_USER_ID ||
+      user.email?.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
+    if ((action === "add" || action === "subtract") && !isSuperAdmin) {
       return json({
         error: "Only the super-admin (zyrofit.my) can add or subtract funds. All other credits must come via ZapUPI.",
       }, 403);

@@ -1,11 +1,15 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const OXAPAY_KEY = Deno.env.get('OXAPAY_MERCHANT_API_KEY')!
+const OXAPAY_KEY = (Deno.env.get('OXAPAY_MERCHANT_API_KEY') || '').trim()
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 Deno.serve(async (req) => {
   // Always respond 200 to prevent OxaPay from retrying storms; log everything.
+  if (!OXAPAY_KEY) {
+    console.error('OXAPAY_MERCHANT_API_KEY is missing')
+    return new Response('ok', { status: 200 })
+  }
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE)
   const sourceIp = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || null
   const userAgent = req.headers.get('user-agent') || null

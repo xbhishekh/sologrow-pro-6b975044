@@ -129,7 +129,7 @@ export default function Wallet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handle OxaPay return — poll oxapay-sync-deposit; webhook does the actual crediting.
+  // Handle OxaPay return — poll oxapay-sync-deposit (verifies with OxaPay API and credits).
   useEffect(() => {
     const url = new URL(window.location.href);
     const orderId = url.searchParams.get('oxapay_order_id');

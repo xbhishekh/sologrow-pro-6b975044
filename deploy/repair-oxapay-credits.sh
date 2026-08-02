@@ -10,8 +10,10 @@ load_secrets
 
 DAYS="${1:-14}"
 DB_CONTAINER="${DB_CONTAINER:-supabase-db}"
-KEY="${OXAPAY_MERCHANT_API_KEY:-${OXAPAY_API_KEY:-${OXAPAY_KEY:-}}}"
-[ -n "$KEY" ] || { echo "OXAPAY_MERCHANT_API_KEY missing in /etc/smmpanel.secrets"; exit 1; }
+# Older VPS installs saved the same merchant key under different names.
+# Keep this alias chain identical to deploy-edge-functions.sh.
+KEY="${OXAPAY_MERCHANT_API_KEY:-${OXAPAY_API_KEY:-${OXAPAY_KEY:-${OXAPAY_MERCHANT_KEY:-${OXAPAY_SECRET:-}}}}}"
+[ -n "$KEY" ] || { echo "OxaPay merchant key missing in /etc/smmpanel.secrets"; exit 1; }
 
 q() { docker exec -i "$DB_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -tAq -c "$1"; }
 

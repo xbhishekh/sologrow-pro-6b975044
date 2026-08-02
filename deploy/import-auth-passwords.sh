@@ -12,11 +12,15 @@ jq -c '.[] | {id, email, encrypted_password}' "$OUT/06_auth_users.json" | vpsql 
 vpsql <<'SQL'
 update auth.users u
    set encrypted_password = p.j->>'encrypted_password',
+       email = lower(btrim(coalesce(nullif(p.j->>'email',''), u.email))),
+       instance_id = coalesce(u.instance_id, '00000000-0000-0000-0000-000000000000'::uuid),
+       aud = 'authenticated',
+       role = 'authenticated',
        email_confirmed_at = coalesce(u.email_confirmed_at, now()),
        updated_at = now()
   from public._mig_pw p
  where u.id = (p.j->>'id')::uuid
-   and coalesce(p.j->>'encrypted_password','') <> ''
+   and coalesce(p.j->>'encrypted_password','') ~ '^\$2[aby]\$'
    and u.encrypted_password is distinct from (p.j->>'encrypted_password');
 SQL
 ok "hashes applied"

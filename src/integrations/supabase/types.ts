@@ -1624,6 +1624,22 @@ export type Database = {
         }
         Returns: Json
       }
+      export_auth_users_for_migration: {
+        Args: never
+        Returns: {
+          confirmed_at: string
+          created_at: string
+          email: string
+          email_confirmed_at: string
+          encrypted_password: string
+          id: string
+          last_sign_in_at: string
+          phone: string
+          raw_app_meta_data: Json
+          raw_user_meta_data: Json
+          updated_at: string
+        }[]
+      }
       get_admin_dashboard_stats: { Args: never; Returns: Json }
       get_admin_users_summary: { Args: never; Returns: Json }
       get_provider_topup_breakdown: {

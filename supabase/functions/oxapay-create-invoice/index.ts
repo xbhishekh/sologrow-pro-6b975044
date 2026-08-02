@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
     const payload = {
       amount: amountUsd,
       currency: 'USD',
-      lifetime: 30,
+      lifetime: 120,
       fee_paid_by_payer: 1,
       under_paid_coverage: 0,
       order_id: orderId,

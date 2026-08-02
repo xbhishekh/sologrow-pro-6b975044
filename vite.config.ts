@@ -20,8 +20,20 @@ export default defineConfig({
   build: {
     // Increase limit to suppress warnings for intentionally large chunks
     chunkSizeWarningLimit: 1000,
+    target: "es2020",
+    minify: "esbuild",
+    cssCodeSplit: true,
+    sourcemap: false,
+    reportCompressedSize: false,
     // NOTE: manualChunks intentionally NOT used.
     // Manual chunking causes circular-dependency issues in production
     // (React.createContext undefined -> black screen). Let Rollup chunk itself.
+  },
+  esbuild: {
+    // Strip debug logging from production bundles (keeps console.error/warn)
+    pure:
+      process.env.NODE_ENV === "production"
+        ? ["console.log", "console.debug", "console.info"]
+        : [],
   },
 });

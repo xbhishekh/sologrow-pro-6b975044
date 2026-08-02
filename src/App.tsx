@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AdminGuard } from "@/components/admin/AdminGuard";
@@ -13,45 +13,72 @@ import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 import { TelegramJoinPopup } from "@/components/TelegramJoinPopup";
 
 
-// ALL pages eager-loaded for instantaneous navigation
+// Landing + auth stay eager (first paint). Everything else is code-split
+// and prefetched on idle, so navigation still feels instant.
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
-import Orders from "./pages/Orders";
-import Wallet from "./pages/Wallet";
-import Settings from "./pages/Settings";
-import Support from "./pages/Support";
-import ApiAccess from "./pages/ApiAccess";
 
-// Engagement pages
-import EngagementOrder from "./pages/EngagementOrder";
-import EngagementOrders from "./pages/EngagementOrders";
-import EngagementOrderDetail from "./pages/EngagementOrderDetail";
+const loadDashboard = () => import("./pages/Dashboard");
+const loadOrders = () => import("./pages/Orders");
+const loadWallet = () => import("./pages/Wallet");
+const loadSettings = () => import("./pages/Settings");
+const loadSupport = () => import("./pages/Support");
+const loadApiAccess = () => import("./pages/ApiAccess");
+const loadEngagementOrder = () => import("./pages/EngagementOrder");
+const loadEngagementOrders = () => import("./pages/EngagementOrders");
+const loadEngagementOrderDetail = () => import("./pages/EngagementOrderDetail");
 
-// Admin pages
-import Admin from "./pages/admin/Admin";
-import AdminUsers from "./pages/admin/AdminUsers";
-import AdminBundles from "./pages/admin/AdminBundles";
-import AdminCronMonitor from "./pages/admin/AdminCronMonitor";
+const Dashboard = lazy(loadDashboard);
+const Orders = lazy(loadOrders);
+const Wallet = lazy(loadWallet);
+const Settings = lazy(loadSettings);
+const Support = lazy(loadSupport);
+const ApiAccess = lazy(loadApiAccess);
+const EngagementOrder = lazy(loadEngagementOrder);
+const EngagementOrders = lazy(loadEngagementOrders);
+const EngagementOrderDetail = lazy(loadEngagementOrderDetail);
 
-import AdminDeposits from "./pages/admin/AdminDeposits";
-import AdminProviderAccounts from "./pages/admin/AdminProviderAccounts";
-import AdminServiceProviderMapping from "./pages/admin/AdminServiceProviderMapping";
-import AdminAuditLog from "./pages/admin/AdminAuditLog";
-import AdminOxaPayEvents from "./pages/admin/AdminOxaPayEvents";
-import AdminPopupAd from "./pages/admin/AdminPopupAd";
-import AdminTelegramPopup from "./pages/admin/AdminTelegramPopup";
-import AdminTopupPlan from "./pages/admin/AdminTopupPlan";
+// Warm the app chunks once the browser is idle so route changes are instant.
+const prefetchAppRoutes = () => {
+  const loaders = [
+    loadDashboard,
+    loadEngagementOrder,
+    loadEngagementOrders,
+    loadEngagementOrderDetail,
+    loadOrders,
+    loadWallet,
+    loadSupport,
+    loadSettings,
+    loadApiAccess,
+  ];
+  loaders.forEach((load, i) => {
+    setTimeout(() => {
+      load().catch(() => {});
+    }, i * 150);
+  });
+};
 
-// Legal pages
-import TermsOfService from "./pages/legal/TermsOfService";
-import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
-import RefundPolicy from "./pages/legal/RefundPolicy";
-import CookiePolicy from "./pages/legal/CookiePolicy";
-import ContactUs from "./pages/legal/ContactUs";
-import AboutUs from "./pages/legal/AboutUs";
-import ShippingPolicy from "./pages/legal/ShippingPolicy";
+// Admin + legal pages are code-split (loaded on demand) to keep the main bundle small
+const Admin = lazy(() => import("./pages/admin/Admin"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const AdminBundles = lazy(() => import("./pages/admin/AdminBundles"));
+const AdminCronMonitor = lazy(() => import("./pages/admin/AdminCronMonitor"));
+const AdminDeposits = lazy(() => import("./pages/admin/AdminDeposits"));
+const AdminProviderAccounts = lazy(() => import("./pages/admin/AdminProviderAccounts"));
+const AdminServiceProviderMapping = lazy(() => import("./pages/admin/AdminServiceProviderMapping"));
+const AdminAuditLog = lazy(() => import("./pages/admin/AdminAuditLog"));
+const AdminOxaPayEvents = lazy(() => import("./pages/admin/AdminOxaPayEvents"));
+const AdminPopupAd = lazy(() => import("./pages/admin/AdminPopupAd"));
+const AdminTelegramPopup = lazy(() => import("./pages/admin/AdminTelegramPopup"));
+const AdminTopupPlan = lazy(() => import("./pages/admin/AdminTopupPlan"));
+const TermsOfService = lazy(() => import("./pages/legal/TermsOfService"));
+const PrivacyPolicy = lazy(() => import("./pages/legal/PrivacyPolicy"));
+const RefundPolicy = lazy(() => import("./pages/legal/RefundPolicy"));
+const CookiePolicy = lazy(() => import("./pages/legal/CookiePolicy"));
+const ContactUs = lazy(() => import("./pages/legal/ContactUs"));
+const AboutUs = lazy(() => import("./pages/legal/AboutUs"));
+const ShippingPolicy = lazy(() => import("./pages/legal/ShippingPolicy"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -89,6 +116,18 @@ const App = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const ric = (window as any).requestIdleCallback as
+      | ((cb: () => void, opts?: { timeout: number }) => number)
+      | undefined;
+    if (ric) {
+      const id = ric(prefetchAppRoutes, { timeout: 4000 });
+      return () => (window as any).cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(prefetchAppRoutes, 2000);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
@@ -100,6 +139,7 @@ const App = () => {
               <BrowserRouter>
                 <ScrollToTop />
                 <TelegramJoinPopup />
+                  <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</div>}>
                   <Routes>
                     {/* User pages */}
                     <Route path="/" element={<Index />} />
@@ -142,6 +182,7 @@ const App = () => {
                     <Route path="/about" element={<AboutUs />} />
                     <Route path="/shipping" element={<ShippingPolicy />} />
                   </Routes>
+                  </Suspense>
                 
               </BrowserRouter>
             </AppErrorBoundary>

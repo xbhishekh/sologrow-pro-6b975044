@@ -1147,9 +1147,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     // No hard gate — organic look comes from priority sorting, not from blocking.
     const gatedEngagementRuns = activeEngagementRuns
 
-    // Fairness: give each item's earliest due run a chance before taking more runs from the same item
-    const itemRunCount = new Map<string, number>()
-    const MAX_CONCURRENT_PER_ITEM = 1
+    // Do not cap an item to one run per invocation. Provider-level guards below
+    // already guarantee that the same provider cannot receive two active orders
+    // for the same link+type. Processing every due run here lets each free mapped
+    // provider take one run in the same cycle instead of leaving artificial queues.
     const executionProviderMap = new Map<string, Set<string>>()
     // Track link+type combos where ALL providers returned "active order" — only skip same type
     const activeOrderLinkTypes = new Set<string>()
@@ -1164,15 +1165,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       return aTime - bTime
     })
 
-    const pendingRunsLimitedPerItem = prioritizedPending.filter((run: any) => {
-      const itemId = run.engagement_order_item_id
-      const count = itemRunCount.get(itemId) || 0
-      if (count < MAX_CONCURRENT_PER_ITEM) {
-        itemRunCount.set(itemId, count + 1)
-        return true
-      }
-      return false
-    })
+    const pendingRunsLimitedPerItem = prioritizedPending
 
     // PRE-FILTER failed runs
     const activeFailedRuns = (failedEngagementRuns || []).filter((run: any) => {
@@ -1198,15 +1191,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       if (pa !== pb) return pa - pb
       return 0
     })
-    const retryRunsLimitedPerItem = prioritizedRetry.filter((run: any) => {
-      const itemId = run.engagement_order_item_id
-      const count = itemRunCount.get(itemId) || 0
-      if (count < MAX_CONCURRENT_PER_ITEM) {
-        itemRunCount.set(itemId, count + 1)
-        return true
-      }
-      return false
-    })
+    const retryRunsLimitedPerItem = prioritizedRetry
 
     const isDeprioritizedBusyRun = (run: any) => {
       const message = (run.error_message || '').toLowerCase()

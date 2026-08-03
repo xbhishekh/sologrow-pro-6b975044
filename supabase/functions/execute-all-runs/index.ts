@@ -1507,28 +1507,6 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         return runLink === sameLink && runType === currentTypeNormalized
       })
       
-      // ROUND-ROBIN: Prefer a different provider after a recent completion,
-      // but do NOT hard-block the just-used provider.
-      // Otherwise next run can get stuck even after the previous one is completed.
-      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-      const { data: recentCompletedRuns } = await supabase
-        .from('organic_run_schedule')
-        .select('provider_account_id, engagement_order_item:engagement_order_items(engagement_type, engagement_order:engagement_orders(link))')
-        .eq('status', 'completed')
-        .not('provider_account_id', 'is', null)
-        .gte('completed_at', fiveMinAgo)
-      
-      const recentCompletedAccountIds = new Set<string>()
-      if (recentCompletedRuns) {
-        for (const rcr of recentCompletedRuns) {
-          const rcrLink = normalizeLink(getNestedEngagementOrderLink(rcr.engagement_order_item))
-          const rcrType = (rcr.engagement_order_item?.engagement_type || '').toLowerCase()
-          if (rcrLink === sameLink && rcrType === currentTypeNormalized && rcr.provider_account_id) {
-            recentCompletedAccountIds.add(rcr.provider_account_id)
-          }
-        }
-      }
-      
       if (startedRunsForLink && startedRunsForLink.length > 0) {
         for (let stuckRun of startedRunsForLink) {
           // INLINE STATUS REFRESH: don't trust stale DB status — re-poll provider live so we

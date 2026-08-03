@@ -2142,8 +2142,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
 
       if (startedRunsForOrder && startedRunsForOrder.length > 0) {
         const stuckRun = startedRunsForOrder[0]
-        const terminalStatuses = ['Completed', 'Partial', 'Refunded', 'Canceled', 'Cancelled', 'Error', 'Failed']
-        const isTerminal = stuckRun.provider_status && terminalStatuses.includes(stuckRun.provider_status)
+        // Keep legacy rotation consistent with engagement orders: providers use
+        // inconsistent casing/spacing for terminal statuses. Normalize it so a
+        // completed provider slot is released instead of blocking queued runs.
+        const isTerminal = isTerminalProviderStatus(stuckRun.provider_status)
         const startedAt = new Date(stuckRun.started_at || 0)
         const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000)
         const isStuckWithoutStatus = startedAt < twoMinutesAgo && !stuckRun.provider_status

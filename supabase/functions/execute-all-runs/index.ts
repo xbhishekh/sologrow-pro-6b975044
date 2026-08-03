@@ -1072,8 +1072,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         .eq('status', 'pending')
         .not('engagement_order_item_id', 'is', null)
         .lte('scheduled_at', nowWithBuffer)
-        .not('engagement_order_item.status', 'in', '("paused","cancelled")')
-        .not('engagement_order_item.engagement_order.status', 'in', '("paused","cancelled")')
+        // Do not filter nested nullable statuses in PostgREST. SQL NOT IN also
+        // rejects NULL, which made valid migrated/legacy items disappear from
+        // the scheduler entirely even though their runs visibly stayed queued.
+        // Paused/cancelled rows are safely removed by activeEngagementRuns below.
         // Fetch strict FIFO at the database level. Ordering by last_status_check
         // first allowed a constant stream of never-checked rows (NULL first) to
         // fill this 1000-row window, so older overdue runs that had already been
@@ -1096,6 +1098,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     // ==========================================
     // STEP 0: GLOBAL CLEANUP (stuck runs)
     // ==========================================
+    let freshlyReleasedRuns: any[] = []
     if (globalStuckRuns && globalStuckRuns.length > 0) {
       console.log(`🧹 Cleaning ${globalStuckRuns.length} stuck runs`)
       // Batch cleanup in parallel
@@ -1144,6 +1147,28 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       console.log(`✅ Cleaned ${globalStuckRuns.length} stuck runs`)
     }
 
+    // The pending query above runs in parallel with cleanup. Ghost reservations
+    // reverted from started -> pending therefore were absent from that snapshot
+    // and had to wait for another cron tick. Fetch those released rows now so a
+    // free provider can receive them in this same invocation.
+    const releasedGhostIds = (globalStuckRuns || [])
+      .filter((stuck: any) => !stuck.provider_order_id)
+      .map((stuck: any) => stuck.id)
+    if (releasedGhostIds.length > 0) {
+      const { data: releasedGhostRuns, error: releasedGhostError } = await supabase
+        .from('organic_run_schedule')
+        .select(`*, engagement_order_item:engagement_order_items!organic_run_schedule_engagement_order_item_id_fkey!inner(*, service:services(*), engagement_order:engagement_orders!inner(*))`)
+        .in('id', releasedGhostIds)
+        .eq('status', 'pending')
+
+      if (releasedGhostError) {
+        console.error('Error fetching released ghost runs:', releasedGhostError)
+      } else if (releasedGhostRuns?.length) {
+        freshlyReleasedRuns = releasedGhostRuns
+        console.log(`♻️ Added ${releasedGhostRuns.length} freshly released runs to this scheduler cycle`)
+      }
+    }
+
     // ==========================================
     // STEP 1: Process ENGAGEMENT ORDER runs
     // ==========================================
@@ -1155,9 +1180,13 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     console.log(`📥 Fetched ${pendingEngagementRuns?.length || 0} raw pending engagement runs from DB`)
 
     // PRE-FILTER: Remove paused/cancelled
-    const activeEngagementRuns = (pendingEngagementRuns || []).filter((run: any) => {
-      const orderStatus = run.engagement_order_item?.engagement_order?.status
-      const itemStatus = run.engagement_order_item?.status
+    const pendingRunById = new Map<string, any>()
+    for (const queuedRun of [...(pendingEngagementRuns || []), ...freshlyReleasedRuns]) {
+      pendingRunById.set(queuedRun.id, queuedRun)
+    }
+    const activeEngagementRuns = [...pendingRunById.values()].filter((run: any) => {
+      const orderStatus = (run.engagement_order_item?.engagement_order?.status || '').toLowerCase().trim()
+      const itemStatus = (run.engagement_order_item?.status || '').toLowerCase().trim()
       if (orderStatus === 'paused' || orderStatus === 'cancelled') return false
       if (itemStatus === 'paused' || itemStatus === 'cancelled') return false
       return true

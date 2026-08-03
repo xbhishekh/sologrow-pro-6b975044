@@ -1814,6 +1814,14 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           })
 
           if (claimError) {
+            // The DB reservation may be won by another scheduler invocation
+            // between our pre-check and this claim. Never call the provider in
+            // that case; rotate this run to its next mapped provider instead.
+            if (claimError.code === '23505' || (claimError.message || '').includes('uniq_active_rotation_lock')) {
+              console.log(`🔒 Run #${run.run_number}: ${selectedAccount.name} reserved concurrently for same link+type; trying next provider`)
+              lastError = `${selectedAccount.name} reserved concurrently — trying next provider`
+              continue
+            }
             console.error(`❌ Failed to claim run lock for ${run.id}:`, claimError)
             lastError = `Run claim failed: ${claimError.message || 'unknown error'}`
             break

@@ -2040,7 +2040,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
                 }
               : {}),
             last_status_check: verifiedLastStatusCheck || new Date().toISOString(),
-          }).eq('id', run.id).eq('status', 'started'),
+          }).eq('id', run.id).eq('status', 'started').select('id'),
           supabase.from('engagement_order_items').update({ status: 'processing' })
             .eq('id', item.id).not('status', 'in', '("cancelled","paused")'),
           supabase.from('engagement_orders').update({ status: 'processing' })

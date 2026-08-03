@@ -137,6 +137,8 @@ interface ProviderAccount {
   is_active: boolean
   last_used_at: string | null
   delivery_multiplier?: number | null
+  balance?: number | null
+  balance_checked_at?: string | null
 }
 
 interface ServiceMapping {
@@ -270,6 +272,19 @@ async function checkProviderBalance(account: ProviderAccount): Promise<{ hasBala
   const cached = balanceCache.get(account.id)
   if (cached && Date.now() - cached.checkedAt < 30000) {
     return { hasBalance: cached.balance > 0, balance: cached.balance }
+  }
+
+  // The balance monitor already persists provider balances. Reuse a fresh DB
+  // value instead of spending up to 10 seconds per candidate on balance calls;
+  // otherwise a few slow panels consume the whole 50s scheduler window before
+  // later free providers are ever attempted.
+  const storedBalance = Number(account.balance)
+  const storedBalanceAge = account.balance_checked_at
+    ? Date.now() - new Date(account.balance_checked_at).getTime()
+    : Number.POSITIVE_INFINITY
+  if (Number.isFinite(storedBalance) && storedBalanceAge < 5 * 60 * 1000) {
+    balanceCache.set(account.id, { balance: storedBalance, checkedAt: Date.now() })
+    return { hasBalance: storedBalance > 0, balance: storedBalance }
   }
 
   try {
@@ -1647,6 +1662,53 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       }, 0)
       let quantityToSend = effectiveQty
 
+      const mergePendingRunsToMinimum = async (minimum: number): Promise<boolean> => {
+        if (minimum <= effectiveQty) return true
+        const { data: futurePendingRuns } = await supabase
+          .from('organic_run_schedule')
+          .select('id, run_number, quantity_to_send')
+          .eq('engagement_order_item_id', item.id)
+          .eq('status', 'pending')
+          .neq('id', run.id)
+          .gt('run_number', run.run_number)
+          .order('run_number', { ascending: true })
+
+        let combinedQty = effectiveQty
+        const runsToMerge: string[] = []
+        for (const pendingRun of futurePendingRuns || []) {
+          combinedQty += Number(pendingRun.quantity_to_send || 0)
+          runsToMerge.push(pendingRun.id)
+          if (combinedQty >= minimum) break
+        }
+        if (combinedQty < minimum || runsToMerge.length === 0) return false
+
+        const { data: mergedRows, error: mergeError } = await supabase
+          .from('organic_run_schedule')
+          .update({
+            status: 'cancelled',
+            completed_at: new Date().toISOString(),
+            error_message: `Merged into run #${run.run_number} to meet provider min ${minimum}`,
+            last_status_check: new Date().toISOString(),
+          })
+          .in('id', runsToMerge)
+          .eq('status', 'pending')
+          .select('id')
+        if (mergeError || (mergedRows?.length || 0) !== runsToMerge.length) return false
+
+        effectiveQty = combinedQty
+        quantityToSend = combinedQty
+        run.quantity_to_send = combinedQty
+        run.base_quantity = combinedQty
+        await supabase.from('organic_run_schedule').update({
+          quantity_to_send: combinedQty,
+          base_quantity: combinedQty,
+          error_message: `Merged ${runsToMerge.length + 1} runs to meet provider min ${minimum}`,
+          last_status_check: new Date().toISOString(),
+        }).eq('id', run.id)
+        console.log(`🧩 Run #${run.run_number} merged to ${combinedQty} so rotation can use provider min ${minimum}`)
+        return true
+      }
+
       if (smallestAccountMin > 0 && effectiveQty < smallestAccountMin) {
         const { data: futurePendingRuns } = await supabase
           .from('organic_run_schedule')
@@ -1728,9 +1790,15 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         // (e.g. scheduled 112 views but provider min is 500 → user sees 500+ delivered).
         // Instead, skip providers whose min exceeds the scheduled qty and try the next one.
         if (accountMinQty && accountMinQty > effectiveQty) {
-          lastError = `Provider ${selectedAccount.name} min ${accountMinQty} > scheduled ${effectiveQty}, skipping to avoid over-delivery`
-          console.log(`⏭️ ${lastError}`)
-          continue
+          // A lower-min provider may have become busy only after its live API
+          // response. Merge future chunks here as a second chance so the next
+          // free mapped provider can be used instead of leaving this run queued.
+          const mergedForProvider = await mergePendingRunsToMinimum(accountMinQty)
+          if (!mergedForProvider) {
+            lastError = `Provider ${selectedAccount.name} min ${accountMinQty} > available scheduled quantity ${effectiveQty}`
+            console.log(`⏭️ ${lastError}`)
+            continue
+          }
         }
         quantityToSend = effectiveQty
         // PRE-CHECK: Cancel check

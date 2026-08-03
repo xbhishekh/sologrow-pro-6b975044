@@ -1171,6 +1171,9 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     })
 
     const pendingRunsLimitedPerItem = prioritizedPending
+    // Once the delivery guard closes an item's unsent rows, skip the remaining
+    // stale copies that were already loaded into this invocation's batch.
+    const fullyReservedItemIds = new Set<string>()
 
     // PRE-FILTER failed runs
     const activeFailedRuns = (failedEngagementRuns || []).filter((run: any) => {
@@ -1254,6 +1257,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         failed++
         continue
       }
+      if (fullyReservedItemIds.has(item.id)) {
+        skipped++
+        continue
+      }
 
       const currentType = item.engagement_type?.toLowerCase()
       const engagementOrderStatus = item.engagement_order?.status
@@ -1308,6 +1315,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           const reservedOrDelivered = observed.reserved
           const remaining = orderedQty - reservedOrDelivered
           if (remaining <= 0) {
+            fullyReservedItemIds.add(item.id)
             // Enough quantity has already been accepted by providers. Leaving every
             // remaining row as overdue `pending` makes these same rows fill the FIFO
             // query on every invocation. The scheduler then spends its whole time

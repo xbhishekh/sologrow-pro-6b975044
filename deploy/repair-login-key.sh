@@ -93,13 +93,30 @@ rm -rf dist-old
 systemctl restart smmpanel
 systemctl is-active --quiet smmpanel || die "smmpanel failed to restart"
 
+# The frontend server needs a moment to bind 127.0.0.1:3000 after restart.
+# Until it does, Caddy answers 502 — so wait instead of failing instantly.
+FRONT_CODE="000"
+for _ in $(seq 1 30); do
+  FRONT_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/" || true)
+  [ "$FRONT_CODE" = "200" ] && break
+  sleep 2
+done
+if [ "$FRONT_CODE" != "200" ]; then
+  printf '%s\n' "--- smmpanel service status ---"
+  systemctl status smmpanel --no-pager -n 30 || true
+  journalctl -u smmpanel -n 40 --no-pager || true
+  die "frontend not serving on 127.0.0.1:3000 (HTTP $FRONT_CODE) — Caddy will return 502"
+fi
+ok "frontend up on 127.0.0.1:3000"
+
 PUBLIC_CODE=$(curl -sS -o /tmp/organicsmm-public-auth-health.json -w '%{http_code}' \
   -H "apikey: $STACK_ANON_KEY" "https://$APP_DOMAIN/auth/v1/health" || true)
 [ "$PUBLIC_CODE" = "200" ] || die "public auth health failed after repair (HTTP $PUBLIC_CODE)"
 
 # Prove that the public HTML references the freshly-built bundle and that its
 # embedded browser key is accepted. Never print either key.
-PUBLIC_HTML=$(curl -fsS -H 'Cache-Control: no-cache' "https://$APP_DOMAIN/?login-repair=$(date +%s)")
+PUBLIC_HTML=$(curl -fsS -H 'Cache-Control: no-cache' "https://$APP_DOMAIN/?login-repair=$(date +%s)" || true)
+[ -n "$PUBLIC_HTML" ] || die "public site unreachable (Caddy 502?) — check: systemctl status smmpanel"
 PUBLIC_JS_PATH=$(printf '%s' "$PUBLIC_HTML" | grep -oE 'src="[^"]+\.js[^"]*"' | tail -n 1 | cut -d'"' -f2)
 [ -n "$PUBLIC_JS_PATH" ] || die "public JS bundle not found"
 case "$PUBLIC_JS_PATH" in

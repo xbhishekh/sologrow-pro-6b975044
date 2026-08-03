@@ -4,28 +4,22 @@
 set -euo pipefail
 . "$(dirname "$0")/_common.sh"
 load_secrets
-
-# 1. PREFER CURRENT DIRECTORY: Prevent stale bundle by using the repo we are running from.
-if [ -f "package.json" ] && [ -d "deploy" ]; then
-  CURRENT_DIR="$(pwd)"
-  if [ "$CURRENT_DIR" != "${APP_DIR:-}" ]; then
-    log "Using current directory as APP_DIR: $CURRENT_DIR"
-    APP_DIR="$CURRENT_DIR"
-  fi
+# Prefer current directory if it contains the app
+if [ -z "${APP_DIR:-}" ] && [ -f "package.json" ] && [ -d "deploy" ]; then
+  export APP_DIR="$(pwd)"
 fi
 
 STACK_ENV="$SUPABASE_DIR/docker/.env"
 [ -f "$STACK_ENV" ] || die "stack env missing: $STACK_ENV"
 
-# 2. INHERIT FROM SERVICE: If a service is already running elsewhere, we MUST know.
+# Build exactly where the running OrganicSMM systemd service serves from.
+# A stale/wrong APP_DIR was the reason an apparently successful rebuild could
+# leave the public website on the old bundle.
 SERVICE_APP_DIR=$(systemctl show smmpanel -p WorkingDirectory --value 2>/dev/null || true)
-if [ -n "$SERVICE_APP_DIR" ] && [ "$SERVICE_APP_DIR" != "[not set]" ] && [ -d "$SERVICE_APP_DIR" ]; then
-  # If the service path differs from our detected APP_DIR, the service wins (it's the active one).
-  # Unless the user explicitly wanted to move the app by running from a new dir.
-  # For repair, we stay with the active service to ensure we are actually repairing the live site.
+if [ -n "$SERVICE_APP_DIR" ] && [ -d "$SERVICE_APP_DIR" ]; then
   APP_DIR="$SERVICE_APP_DIR"
 fi
-[ -f "$APP_DIR/package.json" ] || die "OrganicSMM app not found at APP_DIR: $APP_DIR"
+[ -f "$APP_DIR/package.json" ] || die "OrganicSMM app not found at service WorkingDirectory: $APP_DIR"
 
 # Generate both API keys from this stack's actual JWT secret. This repairs the
 # case where docker/.env contains a stale ANON_KEY after JWT_SECRET changed.
@@ -66,6 +60,8 @@ cd "$SUPABASE_DIR/docker"
 export JWT_SECRET="$STACK_JWT_SECRET"
 export ANON_KEY="$STACK_ANON_KEY"
 export SERVICE_ROLE_KEY="$STACK_SERVICE_KEY"
+# Compose labels isolate this operation to this Supabase stack. No other
+# website's compose project or containers are selected.
 docker compose up -d --force-recreate kong auth rest functions
 
 AUTH_CODE="000"
@@ -90,6 +86,9 @@ cat "$tmp_env" > "$APP_DIR/.env"
 rm -f "$tmp_env"
 
 # Vite gives already-exported shell variables higher priority than .env.
+# Old VITE_* values can remain exported by the secrets file or root shell and
+# silently produce a successful build containing the stale browser key.
+# Force this build process to use the same accepted key as Kong/Auth.
 export VITE_SUPABASE_URL="https://$APP_DOMAIN"
 export VITE_SUPABASE_PUBLISHABLE_KEY="$STACK_ANON_KEY"
 export VITE_SUPABASE_PROJECT_ID="selfhosted"
@@ -104,11 +103,9 @@ pnpm exec vite build --outDir dist-new --emptyOutDir
 mv dist-new dist
 rm -rf dist-old
 
-# Ensure any stale process on port 3000 is killed before restart
-if command -v fuser >/dev/null 2>&1; then
-  fuser -k 3000/tcp >/dev/null 2>&1 || true
-fi
-
+# Replace the globally-installed `serve` process with our dependency-free
+# static server. Global npm packages can disappear/change after Node upgrades,
+# which was causing intermittent port 3000 failures and public 502 responses.
 NODE_BIN=$(command -v node)
 [ -x "$NODE_BIN" ] || die "node executable not found"
 cat > /etc/systemd/system/smmpanel.service <<UNIT
@@ -119,7 +116,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$APP_DIR
-ExecStart="$NODE_BIN" "$APP_DIR/deploy/static-server.mjs" "$APP_DIR/dist" 3000
+ExecStart=$NODE_BIN $APP_DIR/deploy/static-server.mjs $APP_DIR/dist 3000
 Restart=always
 RestartSec=2
 NoNewPrivileges=true
@@ -128,13 +125,13 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 UNIT
-
 systemctl daemon-reload
 systemctl enable smmpanel >/dev/null 2>&1
 systemctl restart smmpanel
 systemctl is-active --quiet smmpanel || die "smmpanel failed to restart"
 
-# Wait for bind
+# The frontend server needs a moment to bind 127.0.0.1:3000 after restart.
+# Until it does, Caddy answers 502 — so wait instead of failing instantly.
 FRONT_CODE="000"
 for _ in $(seq 1 30); do
   FRONT_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/" || true)
@@ -149,14 +146,85 @@ if [ "$FRONT_CODE" != "200" ]; then
 fi
 ok "frontend up on 127.0.0.1:3000"
 
-# Stability check
+# It must remain alive, not merely answer once and then crash.
 sleep 3
 systemctl is-active --quiet smmpanel || {
   journalctl -u smmpanel -n 50 --no-pager || true
   die "frontend crashed after startup"
 }
+STABLE_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/" || true)
+[ "$STABLE_CODE" = "200" ] || die "frontend became unavailable after startup (HTTP $STABLE_CODE)"
 
-# Prove that the public HTML references the freshly-built bundle
+# Repair only this domain's Caddy block. On multi-project VPS installations an
+# older OrganicSMM block/upstream can keep serving a stale build even though the
+# new service on :3000 is healthy. Preserve every other website in Caddyfile.
+CADDYFILE=/etc/caddy/Caddyfile
+[ -f "$CADDYFILE" ] || die "Caddyfile missing: $CADDYFILE"
+cp "$CADDYFILE" "$CADDYFILE.login-repair.bak"
+APP_DOMAIN="$APP_DOMAIN" python3 - "$CADDYFILE" <<'PY'
+import os
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+domain = os.environ["APP_DOMAIN"]
+lines = path.read_text().splitlines(keepends=True)
+replacement = f'''{domain} {{
+\tencode zstd gzip
+
+\t@organicsmm_api path /rest/v1/* /auth/v1/* /functions/v1/* /storage/v1/* /realtime/v1/* /graphql/v1/*
+\thandle @organicsmm_api {{
+\t\treverse_proxy 127.0.0.1:8000
+\t}}
+
+\thandle {{
+\t\treverse_proxy 127.0.0.1:3000
+\t}}
+}}
+'''
+
+result = []
+found = False
+i = 0
+while i < len(lines):
+    stripped = lines[i].strip()
+    if stripped == f"{domain} {{":
+        if not found:
+            result.append(replacement)
+            found = True
+        depth = lines[i].count("{") - lines[i].count("}")
+        i += 1
+        while i < len(lines) and depth > 0:
+            depth += lines[i].count("{") - lines[i].count("}")
+            i += 1
+        continue
+    result.append(lines[i])
+    i += 1
+
+if not found:
+    if result and not result[-1].endswith("\n"):
+        result[-1] += "\n"
+    result.extend(["\n", replacement])
+path.write_text("".join(result))
+PY
+
+if ! caddy validate --config "$CADDYFILE"; then
+  cp "$CADDYFILE.login-repair.bak" "$CADDYFILE"
+  die "OrganicSMM Caddy route repair was invalid; original config restored"
+fi
+systemctl reload caddy || {
+  cp "$CADDYFILE.login-repair.bak" "$CADDYFILE"
+  systemctl reload caddy || true
+  die "Caddy reload failed; original config restored"
+}
+ok "OrganicSMM Caddy route pinned to 127.0.0.1:3000 (other websites unchanged)"
+
+PUBLIC_CODE=$(curl -sS -o /tmp/organicsmm-public-auth-health.json -w '%{http_code}' \
+  -H "apikey: $STACK_ANON_KEY" "https://$APP_DOMAIN/auth/v1/health" || true)
+[ "$PUBLIC_CODE" = "200" ] || die "public auth health failed after repair (HTTP $PUBLIC_CODE)"
+
+# Prove that the public HTML references the freshly-built bundle and that its
+# embedded browser key is accepted. Never print either key.
 PUBLIC_HTML=$(curl -fsS -H 'Cache-Control: no-cache' "https://$APP_DOMAIN/?login-repair=$(date +%s)" || true)
 [ -n "$PUBLIC_HTML" ] || die "public site unreachable (Caddy 502?) — check: systemctl status smmpanel"
 PUBLIC_JS_PATH=$(printf '%s' "$PUBLIC_HTML" | grep -oE 'src="[^"]+\.js[^"]*"' | tail -n 1 | cut -d'"' -f2)

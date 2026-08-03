@@ -32,9 +32,12 @@ function safeAssetPath(pathname) {
     return undefined;
   }
 
-  const relative = normalize(decoded).replace(/^[/\\]+/, "");
+  const relative = normalize(decoded).replace(/^[/\]+/, "");
   const candidate = resolve(join(root, relative));
-  return candidate === root || candidate.startsWith(`${root}/`) ? candidate : undefined;
+  // Robust check: candidate must be within root. 
+  // We use a trailing slash to avoid matching /opt/dist-backup with /opt/dist prefix.
+  const rootDir = root.endsWith("/") ? root : `${root}/`;
+  return (candidate === root || candidate.startsWith(rootDir)) ? candidate : undefined;
 }
 
 const server = createServer((request, response) => {
@@ -70,8 +73,16 @@ const server = createServer((request, response) => {
   createReadStream(filePath).pipe(response);
 });
 
-server.listen(port, "127.0.0.1", () => {
-  console.log(`OrganicSMM frontend serving ${root} on 127.0.0.1:${port}`);
+server.on("error", (err) => {
+  console.error("Server error:", err.message);
+  if (err.code === "EADDRINUSE") {
+    console.error(`Port ${port} is already in use. Ensure no other process is bound to it.`);
+  }
+  process.exit(1);
+});
+
+server.listen(port, "0.0.0.0", () => {
+  console.log(`OrganicSMM frontend serving ${root} on 0.0.0.0:${port}`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

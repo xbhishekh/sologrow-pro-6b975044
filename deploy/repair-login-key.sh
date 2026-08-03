@@ -8,6 +8,15 @@ load_secrets
 STACK_ENV="$SUPABASE_DIR/docker/.env"
 [ -f "$STACK_ENV" ] || die "stack env missing: $STACK_ENV"
 
+# Build exactly where the running OrganicSMM systemd service serves from.
+# A stale/wrong APP_DIR was the reason an apparently successful rebuild could
+# leave the public website on the old bundle.
+SERVICE_APP_DIR=$(systemctl show smmpanel -p WorkingDirectory --value 2>/dev/null || true)
+if [ -n "$SERVICE_APP_DIR" ] && [ -d "$SERVICE_APP_DIR" ]; then
+  APP_DIR="$SERVICE_APP_DIR"
+fi
+[ -f "$APP_DIR/package.json" ] || die "OrganicSMM app not found at service WorkingDirectory: $APP_DIR"
+
 # Generate both API keys from this stack's actual JWT secret. This repairs the
 # case where docker/.env contains a stale ANON_KEY after JWT_SECRET changed.
 STACK_JWT_SECRET=$(sed -n 's/^JWT_SECRET=//p' "$STACK_ENV" | tail -n 1)
@@ -81,6 +90,20 @@ systemctl is-active --quiet smmpanel || die "smmpanel failed to restart"
 PUBLIC_CODE=$(curl -sS -o /tmp/organicsmm-public-auth-health.json -w '%{http_code}' \
   -H "apikey: $STACK_ANON_KEY" "https://$APP_DOMAIN/auth/v1/health" || true)
 [ "$PUBLIC_CODE" = "200" ] || die "public auth health failed after repair (HTTP $PUBLIC_CODE)"
+
+# Prove that the public HTML references the freshly-built bundle and that its
+# embedded browser key is accepted. Never print either key.
+PUBLIC_HTML=$(curl -fsS -H 'Cache-Control: no-cache' "https://$APP_DOMAIN/?login-repair=$(date +%s)")
+PUBLIC_JS_PATH=$(printf '%s' "$PUBLIC_HTML" | grep -oE 'src="[^"]+\.js[^"]*"' | tail -n 1 | cut -d'"' -f2)
+[ -n "$PUBLIC_JS_PATH" ] || die "public JS bundle not found"
+case "$PUBLIC_JS_PATH" in
+  http*) PUBLIC_JS_URL="$PUBLIC_JS_PATH" ;;
+  /*) PUBLIC_JS_URL="https://$APP_DOMAIN$PUBLIC_JS_PATH" ;;
+  *) PUBLIC_JS_URL="https://$APP_DOMAIN/$PUBLIC_JS_PATH" ;;
+esac
+PUBLIC_JS=$(curl -fsS -H 'Cache-Control: no-cache' "$PUBLIC_JS_URL")
+printf '%s' "$PUBLIC_JS" | grep -Fq "$STACK_ANON_KEY" || die "public site still serves stale bundle; check Caddy upstream and smmpanel WorkingDirectory"
+ok "public bundle contains current accepted key"
 
 ok "LOGIN KEY REPAIRED — users/passwords/data unchanged"
 echo "Ab browser me hard refresh karke login test karo (Ctrl+Shift+R)."

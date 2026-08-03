@@ -90,6 +90,31 @@ pnpm exec vite build --outDir dist-new --emptyOutDir
 [ -d dist ] && mv dist dist-old
 mv dist-new dist
 rm -rf dist-old
+
+# Replace the globally-installed `serve` process with our dependency-free
+# static server. Global npm packages can disappear/change after Node upgrades,
+# which was causing intermittent port 3000 failures and public 502 responses.
+NODE_BIN=$(command -v node)
+[ -x "$NODE_BIN" ] || die "node executable not found"
+cat > /etc/systemd/system/smmpanel.service <<UNIT
+[Unit]
+Description=OrganicSMM frontend (static)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$APP_DIR
+ExecStart=$NODE_BIN $APP_DIR/deploy/static-server.mjs $APP_DIR/dist 3000
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable smmpanel >/dev/null 2>&1
 systemctl restart smmpanel
 systemctl is-active --quiet smmpanel || die "smmpanel failed to restart"
 
@@ -108,6 +133,15 @@ if [ "$FRONT_CODE" != "200" ]; then
   die "frontend not serving on 127.0.0.1:3000 (HTTP $FRONT_CODE) — Caddy will return 502"
 fi
 ok "frontend up on 127.0.0.1:3000"
+
+# It must remain alive, not merely answer once and then crash.
+sleep 3
+systemctl is-active --quiet smmpanel || {
+  journalctl -u smmpanel -n 50 --no-pager || true
+  die "frontend crashed after startup"
+}
+STABLE_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/" || true)
+[ "$STABLE_CODE" = "200" ] || die "frontend became unavailable after startup (HTTP $STABLE_CODE)"
 
 PUBLIC_CODE=$(curl -sS -o /tmp/organicsmm-public-auth-health.json -w '%{http_code}' \
   -H "apikey: $STACK_ANON_KEY" "https://$APP_DOMAIN/auth/v1/health" || true)

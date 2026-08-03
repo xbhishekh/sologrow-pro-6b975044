@@ -1193,27 +1193,21 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     })
     const retryRunsLimitedPerItem = prioritizedRetry
 
-    const isDeprioritizedBusyRun = (run: any) => {
-      const message = (run.error_message || '').toLowerCase()
-      return message.includes('[postponed] all providers busy') ||
-        message.includes('[batch postponed]') ||
-        message.includes('[waiting for merge]') ||
-        message.includes('active order on link')
-    }
-
     const allEngagementRuns = [...pendingRunsLimitedPerItem, ...retryRunsLimitedPerItem].sort((a: any, b: any) => {
-      const aBusy = isDeprioritizedBusyRun(a) ? 1 : 0
-      const bBusy = isDeprioritizedBusyRun(b) ? 1 : 0
-      if (aBusy !== bBusy) return aBusy - bBusy
-
       // Views always ahead of other types in the same batch
       const pa = priorityForType(a.engagement_order_item?.engagement_type)
       const pb = priorityForType(b.engagement_order_item?.engagement_type)
       if (pa !== pb) return pa - pb
 
+      // Strict FIFO within an engagement type. A previous temporary "busy"
+      // message must never push an older due run behind newer runs; otherwise
+      // the newer run repeatedly grabs the newly-free provider and the older
+      // queued run starves forever.
       const aTime = new Date(a.scheduled_at || 0).getTime()
       const bTime = new Date(b.scheduled_at || 0).getTime()
-      return aTime - bTime
+      if (aTime !== bTime) return aTime - bTime
+
+      return Number(a.run_number || 0) - Number(b.run_number || 0)
     })
     console.log(`Processing ${allEngagementRuns.length} runs (${pendingRunsLimitedPerItem.length} pending + ${retryRunsLimitedPerItem.length} retry), total overdue in DB: check query`)
 

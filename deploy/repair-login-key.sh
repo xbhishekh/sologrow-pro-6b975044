@@ -185,19 +185,80 @@ systemctl is-active --quiet smmpanel || {
   die "frontend crashed after startup"
 }
 
-# Prove that the public HTML references the freshly-built bundle
+# Prove the build itself contains the accepted key before touching Caddy.
+grep -FRlq -- "$STACK_ANON_KEY" "$APP_DIR/dist/assets" || die "fresh local build does not contain accepted backend key"
+ok "fresh local build contains accepted key"
+
+# Repair ONLY this domain's Caddy block. Preserve every other hosted website.
+CADDY_FILE=/etc/caddy/Caddyfile
+[ -f "$CADDY_FILE" ] || die "Caddyfile missing: $CADDY_FILE"
+cp "$CADDY_FILE" "${CADDY_FILE}.before-login-repair"
+APP_DOMAIN="$APP_DOMAIN" python3 - "$CADDY_FILE" <<'PY'
+import os, re, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+domain = os.environ["APP_DOMAIN"]
+text = path.read_text()
+replacement = f'''{domain} {{
+\tencode zstd gzip
+\t@organicsmm_api path /rest/v1/* /auth/v1/* /functions/v1/* /storage/v1/* /realtime/v1/* /graphql/v1/*
+\thandle @organicsmm_api {{
+\t\treverse_proxy 127.0.0.1:8000
+\t}}
+\thandle {{
+\t\treverse_proxy 127.0.0.1:3000
+\t}}
+}}'''
+
+# Find an exact site-address line, then replace its balanced block.
+match = re.search(r"(?m)^\s*" + re.escape(domain) + r"\s*\{", text)
+if match:
+    start = match.start()
+    brace = text.find("{", match.start(), match.end())
+    depth = 0
+    end = None
+    for index in range(brace, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                end = index + 1
+                break
+    if end is None:
+        raise SystemExit(f"unbalanced Caddy block for {domain}")
+    text = text[:start] + replacement + text[end:]
+else:
+    text = text.rstrip() + "\n\n" + replacement + "\n"
+path.write_text(text)
+PY
+
+caddy fmt --overwrite "$CADDY_FILE"
+if ! caddy validate --config "$CADDY_FILE"; then
+  cp "${CADDY_FILE}.before-login-repair" "$CADDY_FILE"
+  die "OrganicSMM Caddy route invalid; original config restored"
+fi
+systemctl reload caddy
+ok "OrganicSMM Caddy route pinned to ports 3000/8000; other sites preserved"
+
+# Verify this VPS directly, bypassing public DNS/CDN. Comparing the asset name
+# is more reliable than grepping one guessed public script.
+EXPECTED_JS=$(grep -oE 'src="[^"]+\.js[^"]*"' "$APP_DIR/dist/index.html" | tail -n 1 | cut -d'"' -f2)
+[ -n "$EXPECTED_JS" ] || die "fresh build JS reference missing"
+LOCAL_CADDY_HTML=$(curl -kfsS --resolve "$APP_DOMAIN:443:127.0.0.1" \
+  -H 'Cache-Control: no-cache' "https://$APP_DOMAIN/?login-repair=$(date +%s)" || true)
+printf '%s' "$LOCAL_CADDY_HTML" | grep -Fq "$EXPECTED_JS" || die "local Caddy is not serving the fresh OrganicSMM build"
+ok "local Caddy serves fresh OrganicSMM bundle"
+
+# Public DNS may be proxied/cached or point at another VPS. Report that clearly
+# without falsely claiming that this server or port 3000 failed.
 PUBLIC_HTML=$(curl -fsS -H 'Cache-Control: no-cache' "https://$APP_DOMAIN/?login-repair=$(date +%s)" || true)
-[ -n "$PUBLIC_HTML" ] || die "public site unreachable (Caddy 502?) — check: systemctl status smmpanel"
-PUBLIC_JS_PATH=$(printf '%s' "$PUBLIC_HTML" | grep -oE 'src="[^"]+\.js[^"]*"' | tail -n 1 | cut -d'"' -f2)
-[ -n "$PUBLIC_JS_PATH" ] || die "public JS bundle not found"
-case "$PUBLIC_JS_PATH" in
-  http*) PUBLIC_JS_URL="$PUBLIC_JS_PATH" ;;
-  /*) PUBLIC_JS_URL="https://$APP_DOMAIN$PUBLIC_JS_PATH" ;;
-  *) PUBLIC_JS_URL="https://$APP_DOMAIN/$PUBLIC_JS_PATH" ;;
-esac
-PUBLIC_JS=$(curl -fsS -H 'Cache-Control: no-cache' "$PUBLIC_JS_URL")
-printf '%s' "$PUBLIC_JS" | grep -Fq "$STACK_ANON_KEY" || die "public site still serves stale bundle; check Caddy upstream and smmpanel WorkingDirectory"
-ok "public bundle contains current accepted key"
+if printf '%s' "$PUBLIC_HTML" | grep -Fq "$EXPECTED_JS"; then
+  ok "public domain serves fresh bundle"
+else
+  printf '\033[1;33m[WARN]\033[0m VPS is repaired, but public domain is reaching another/cached server. Check this domain A record points to this VPS IP.\n'
+fi
 
 ok "LOGIN KEY REPAIRED — users/passwords/data unchanged"
 echo "Ab browser me hard refresh karke login test karo (Ctrl+Shift+R)."

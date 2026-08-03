@@ -1538,9 +1538,11 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       
       if (startedRunsForLink && startedRunsForLink.length > 0) {
         for (let stuckRun of startedRunsForLink) {
-          // INLINE STATUS REFRESH: don't trust stale DB status — re-poll provider live so we
-          // never block the next run just because check-order-status cron hasn't run yet.
-          stuckRun = await inlineRefreshRunStatus(supabase, stuckRun)
+          // Do not live-poll every active provider before trying an unused mapped
+          // provider. Those sequential network calls consumed the scheduler time
+          // slice after two active runs, so provider #3-#5 were never reached.
+          // check-order-status owns live status polling; this scheduler only needs
+          // the persisted state to reserve active accounts and fill free accounts.
           // Provider status casing is not consistent (e.g. "Completed",
           // "completed" or values with surrounding spaces). A case-sensitive
           // comparison kept a finished run in busyAccountIds and prevented the
@@ -2077,54 +2079,16 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
               continue
             }
 
-            // Immediate live-count verification: capture provider start/remains as soon
-            // as the run is created so target = first_start_count + ordered_quantity
-            // is enforced before the next scheduled run is allowed through.
+            // Persist the accepted provider order immediately. Do not make another
+            // synchronous status request here: with 4-5 free mapped providers, that
+            // extra call per placement exhausted the 50s scheduler window after two
+            // runs. check-order-status will populate start/remains on its next tick.
             verifiedStatus = 'Pending'
             providerResult = { add: result }
-            try {
-              const statusForm = new URLSearchParams()
-              statusForm.append('key', selectedAccount.api_key)
-              statusForm.append('action', 'status')
-              statusForm.append('order', providerOrderId)
-              const statusCtrl = new AbortController()
-              const statusTimer = setTimeout(() => statusCtrl.abort(), 8000)
-              const statusResponse = await fetch(selectedAccount.api_url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: statusForm.toString(),
-                signal: statusCtrl.signal,
-              })
-              clearTimeout(statusTimer)
-              const statusText = await statusResponse.text()
-              let statusResult: any = {}
-              try { statusResult = JSON.parse(statusText) } catch { statusResult = { error: statusText } }
-              if (!statusResult.error) {
-                verifiedStatus = statusResult.status || verifiedStatus
-                const remainsValue = statusResult.remains !== undefined && statusResult.remains !== null
-                  ? Number(statusResult.remains)
-                  : null
-                const startValue = statusResult.start_count !== undefined && statusResult.start_count !== null
-                  ? Number(statusResult.start_count)
-                  : null
-                const chargeValue = statusResult.charge !== undefined && statusResult.charge !== null
-                  ? Number(statusResult.charge)
-                  : null
-                verifiedRemains = Number.isFinite(remainsValue) ? remainsValue : null
-                verifiedStartCount = Number.isFinite(startValue) ? startValue : null
-                verifiedCharge = Number.isFinite(chargeValue) ? chargeValue : null
-                verifiedLastStatusCheck = new Date().toISOString()
-                providerResult = { add: result, initial_status: statusResult }
-              } else {
-                providerResult = { add: result, initial_status_error: statusResult.error }
-              }
-            } catch (statusError) {
-              providerResult = { add: result, initial_status_error: (statusError as Error).message || 'Status check failed' }
-            }
             successAccount = selectedAccount
             success = true
             await updateAccountLastUsed(supabase, selectedAccount.id)
-            console.log(`✅ Run #${run.run_number} placed via ${selectedAccount.name}! Order ID: ${providerOrderId} (initial live count checked)`)
+            console.log(`✅ Run #${run.run_number} placed via ${selectedAccount.name}! Order ID: ${providerOrderId}`)
             break
           }
         } catch (fetchError: any) {

@@ -1098,6 +1098,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     // ==========================================
     // STEP 0: GLOBAL CLEANUP (stuck runs)
     // ==========================================
+    let freshlyReleasedRuns: any[] = []
     if (globalStuckRuns && globalStuckRuns.length > 0) {
       console.log(`🧹 Cleaning ${globalStuckRuns.length} stuck runs`)
       // Batch cleanup in parallel
@@ -1163,10 +1164,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       if (releasedGhostError) {
         console.error('Error fetching released ghost runs:', releasedGhostError)
       } else if (releasedGhostRuns?.length) {
-        const existingIds = new Set((pendingEngagementRuns || []).map((row: any) => row.id))
-        for (const releasedRun of releasedGhostRuns) {
-          if (!existingIds.has(releasedRun.id)) pendingEngagementRuns?.push(releasedRun)
-        }
+        freshlyReleasedRuns = releasedGhostRuns
         console.log(`♻️ Added ${releasedGhostRuns.length} freshly released runs to this scheduler cycle`)
       }
     }
@@ -1182,9 +1180,13 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     console.log(`📥 Fetched ${pendingEngagementRuns?.length || 0} raw pending engagement runs from DB`)
 
     // PRE-FILTER: Remove paused/cancelled
-    const activeEngagementRuns = (pendingEngagementRuns || []).filter((run: any) => {
-      const orderStatus = run.engagement_order_item?.engagement_order?.status
-      const itemStatus = run.engagement_order_item?.status
+    const pendingRunById = new Map<string, any>()
+    for (const queuedRun of [...(pendingEngagementRuns || []), ...freshlyReleasedRuns]) {
+      pendingRunById.set(queuedRun.id, queuedRun)
+    }
+    const activeEngagementRuns = [...pendingRunById.values()].filter((run: any) => {
+      const orderStatus = (run.engagement_order_item?.engagement_order?.status || '').toLowerCase().trim()
+      const itemStatus = (run.engagement_order_item?.status || '').toLowerCase().trim()
       if (orderStatus === 'paused' || orderStatus === 'cancelled') return false
       if (itemStatus === 'paused' || itemStatus === 'cancelled') return false
       return true

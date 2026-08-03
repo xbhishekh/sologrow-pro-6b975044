@@ -282,7 +282,7 @@ async function checkProviderBalance(account: ProviderAccount): Promise<{ hasBala
   const storedBalanceAge = account.balance_checked_at
     ? Date.now() - new Date(account.balance_checked_at).getTime()
     : Number.POSITIVE_INFINITY
-  if (Number.isFinite(storedBalance) && storedBalanceAge < 5 * 60 * 1000) {
+  if (Number.isFinite(storedBalance) && storedBalanceAge < 2 * 60 * 60 * 1000) {
     balanceCache.set(account.id, { balance: storedBalance, checkedAt: Date.now() })
     return { hasBalance: storedBalance > 0, balance: storedBalance }
   }

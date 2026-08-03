@@ -8,24 +8,52 @@ load_secrets
 STACK_ENV="$SUPABASE_DIR/docker/.env"
 [ -f "$STACK_ENV" ] || die "stack env missing: $STACK_ENV"
 
-# The running backend stack is the source of truth. Never print the key.
-STACK_ANON_KEY=$(sed -n 's/^ANON_KEY=//p' "$STACK_ENV" | tail -n 1)
-[ -n "$STACK_ANON_KEY" ] || die "ANON_KEY missing in $STACK_ENV"
-
-log "OrganicSMM auth gateway key verify"
-AUTH_CODE=$(curl -sS -o /tmp/organicsmm-auth-health.json -w '%{http_code}' \
-  -H "apikey: $STACK_ANON_KEY" \
-  "http://127.0.0.1:8000/auth/v1/health" || true)
-[ "$AUTH_CODE" = "200" ] || die "running backend rejected its stack key (HTTP $AUTH_CODE); no changes made"
-ok "backend key valid"
+# Generate both API keys from this stack's actual JWT secret. This repairs the
+# case where docker/.env contains a stale ANON_KEY after JWT_SECRET changed.
+STACK_JWT_SECRET=$(sed -n 's/^JWT_SECRET=//p' "$STACK_ENV" | tail -n 1)
+[ -n "$STACK_JWT_SECRET" ] || die "JWT_SECRET missing in $STACK_ENV"
+KEYS_JSON=$(JWT_SECRET="$STACK_JWT_SECRET" node -e '
+  const c=require("crypto");
+  const b=(o)=>Buffer.from(JSON.stringify(o)).toString("base64url");
+  const sign=(role)=>{const h=b({alg:"HS256",typ:"JWT"});
+    const iat=Math.floor(Date.now()/1000), exp=iat+60*60*24*365*10;
+    const p=b({role,iss:"supabase",iat,exp});
+    const s=c.createHmac("sha256",process.env.JWT_SECRET).update(h+"."+p).digest("base64url");
+    return h+"."+p+"."+s;};
+  console.log(JSON.stringify({anon:sign("anon"),service:sign("service_role")}));')
+STACK_ANON_KEY=$(printf '%s' "$KEYS_JSON" | jq -r .anon)
+STACK_SERVICE_KEY=$(printf '%s' "$KEYS_JSON" | jq -r .service)
+[ -n "$STACK_ANON_KEY" ] && [ -n "$STACK_SERVICE_KEY" ] || die "key generation failed"
 
 log "OrganicSMM secrets + frontend env sync"
 tmp_secrets=$(mktemp)
-awk '!/^ANON_KEY=/' "$SECRETS_FILE" > "$tmp_secrets"
-printf 'ANON_KEY=%s\n' "$STACK_ANON_KEY" >> "$tmp_secrets"
+awk '!/^(ANON_KEY|SERVICE_ROLE_KEY)=/' "$SECRETS_FILE" > "$tmp_secrets"
+printf 'ANON_KEY=%s\nSERVICE_ROLE_KEY=%s\n' "$STACK_ANON_KEY" "$STACK_SERVICE_KEY" >> "$tmp_secrets"
 cat "$tmp_secrets" > "$SECRETS_FILE"
 rm -f "$tmp_secrets"
 chmod 600 "$SECRETS_FILE"
+
+tmp_stack=$(mktemp)
+awk '!/^(ANON_KEY|SERVICE_ROLE_KEY)=/' "$STACK_ENV" > "$tmp_stack"
+printf 'ANON_KEY=%s\nSERVICE_ROLE_KEY=%s\n' "$STACK_ANON_KEY" "$STACK_SERVICE_KEY" >> "$tmp_stack"
+cat "$tmp_stack" > "$STACK_ENV"
+rm -f "$tmp_stack"
+
+log "OrganicSMM auth services recreate"
+cd "$SUPABASE_DIR/docker"
+# Compose labels isolate this operation to this Supabase stack. No other
+# website's compose project or containers are selected.
+docker compose up -d --force-recreate kong auth rest functions
+
+AUTH_CODE="000"
+for _ in $(seq 1 30); do
+  AUTH_CODE=$(curl -sS -o /tmp/organicsmm-auth-health.json -w '%{http_code}' \
+    -H "apikey: $STACK_ANON_KEY" "http://127.0.0.1:8000/auth/v1/health" || true)
+  [ "$AUTH_CODE" = "200" ] && break
+  sleep 2
+done
+[ "$AUTH_CODE" = "200" ] || die "regenerated key still rejected locally (HTTP $AUTH_CODE)"
+ok "backend key regenerated and accepted"
 
 mkdir -p "$APP_DIR"
 tmp_env=$(mktemp)

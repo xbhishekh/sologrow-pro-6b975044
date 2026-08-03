@@ -1005,6 +1005,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     // ==========================================
     const nowWithBuffer = new Date(Date.now() + 2000).toISOString()
     const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const ghostReservationCutoff = new Date(Date.now() - 60 * 1000).toISOString()
 
     const [
       { data: activeRuns },
@@ -1022,7 +1023,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         .from('organic_run_schedule')
         .select('id, run_number, started_at, provider_account_id, provider_status, provider_order_id, provider_remains, provider_start_count, quantity_to_send, retry_count')
         .eq('status', 'started')
-        .or(`started_at.lt.${tenMinAgo},started_at.is.null`),
+        // A row with no provider order id is only an atomic pre-dispatch
+        // reservation. Container restarts can orphan it, so release it after
+        // 60s; confirmed provider orders keep the conservative 10-minute sweep.
+        .or(`started_at.is.null,started_at.lt.${tenMinAgo},and(provider_order_id.is.null,started_at.lt.${ghostReservationCutoff})`),
       // 3. Pending engagement runs
       supabase
         .from('organic_run_schedule')
@@ -1171,6 +1175,9 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     })
 
     const pendingRunsLimitedPerItem = prioritizedPending
+    // Once the delivery guard closes an item's unsent rows, skip the remaining
+    // stale copies that were already loaded into this invocation's batch.
+    const fullyReservedItemIds = new Set<string>()
 
     // PRE-FILTER failed runs
     const activeFailedRuns = (failedEngagementRuns || []).filter((run: any) => {
@@ -1254,6 +1261,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         failed++
         continue
       }
+      if (fullyReservedItemIds.has(item.id)) {
+        skipped++
+        continue
+      }
 
       const currentType = item.engagement_type?.toLowerCase()
       const engagementOrderStatus = item.engagement_order?.status
@@ -1308,13 +1319,19 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           const reservedOrDelivered = observed.reserved
           const remaining = orderedQty - reservedOrDelivered
           if (remaining <= 0) {
-            // Enough quantity is already at providers, but live public count has not
-            // reached target yet. Keep future runs due instead of pushing their
-            // schedule forward every cron tick. They remain visibly queued and are
-            // reconsidered immediately after an active reservation is completed or
-            // released, while still preventing over-delivery in this invocation.
+            fullyReservedItemIds.add(item.id)
+            // Enough quantity has already been accepted by providers. Leaving every
+            // remaining row as overdue `pending` makes these same rows fill the FIFO
+            // query on every invocation. The scheduler then spends its whole time
+            // re-checking permanently reserved items and newer valid orders starve.
+            // Close only the unsent rows: started/completed provider orders remain
+            // untouched and continue status tracking, while no duplicate quantity is
+            // sent. If an accepted provider order later fails, its own retry path can
+            // recover that exact chunk without reopening all future runs.
             await supabase.from('organic_run_schedule').update({
-              error_message: `Delivery reserved (asked=${observed.askedSent}, observed=${observed.observedByRuns}, public_delta=${observed.publicCountDelta}, public_delta_adj=${observed.adjustedPublicCountDelta}, buffer=${observed.publicDeltaBuffer}, target=${orderedQty}) — awaiting live target count`,
+              status: 'cancelled',
+              completed_at: new Date().toISOString(),
+              error_message: `Closed by delivery guard (asked=${observed.askedSent}, observed=${observed.observedByRuns}, public_delta=${observed.publicCountDelta}, public_delta_adj=${observed.adjustedPublicCountDelta}, buffer=${observed.publicDeltaBuffer}, target=${orderedQty}) — full target already accepted by providers`,
               last_status_check: new Date().toISOString(),
             }).eq('engagement_order_item_id', item.id).eq('status', 'pending')
             if (actualDelivered >= orderedQty) {
@@ -1334,7 +1351,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
               }).eq('id', item.id).not('status', 'in', '("cancelled","paused","completed")')
             }
             skipped++
-            console.log(`🛡️ Item ${item.id} delivery reserved — asked=${observed.askedSent}, observed=${observed.observedByRuns}, public_delta=${observed.publicCountDelta}, public_delta_adj=${observed.adjustedPublicCountDelta}, buffer=${observed.publicDeltaBuffer}, target=${orderedQty}. Awaiting live public target.`)
+            console.log(`🛡️ Item ${item.id} fully reserved — closed remaining pending runs (asked=${observed.askedSent}, observed=${observed.observedByRuns}, public_delta=${observed.publicCountDelta}, public_delta_adj=${observed.adjustedPublicCountDelta}, buffer=${observed.publicDeltaBuffer}, target=${orderedQty}).`)
             continue
           }
           const liveRemaining = tracking ? Math.max(1, tracking.remaining) : remaining

@@ -86,18 +86,19 @@ pnpm run build
 ok "build done ($(du -sh dist | cut -f1))"
 
 log "systemd service (static server on :3000)"
-npm i -g serve >/dev/null 2>&1 || true
 cat > /etc/systemd/system/smmpanel.service <<UNIT
 [Unit]
-Description=SMM Panel frontend (static)
+Description=OrganicSMM frontend (static)
 After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=$APP_DIR
-ExecStart=$(command -v serve) -s dist -l 3000
+ExecStart=$(command -v node) $APP_DIR/deploy/static-server.mjs $APP_DIR/dist 3000
 Restart=always
-RestartSec=3
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target

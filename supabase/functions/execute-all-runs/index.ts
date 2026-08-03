@@ -1005,6 +1005,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     // ==========================================
     const nowWithBuffer = new Date(Date.now() + 2000).toISOString()
     const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const ghostReservationCutoff = new Date(Date.now() - 60 * 1000).toISOString()
 
     const [
       { data: activeRuns },
@@ -1022,7 +1023,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         .from('organic_run_schedule')
         .select('id, run_number, started_at, provider_account_id, provider_status, provider_order_id, provider_remains, provider_start_count, quantity_to_send, retry_count')
         .eq('status', 'started')
-        .or(`started_at.lt.${tenMinAgo},started_at.is.null`),
+        // A row with no provider order id is only an atomic pre-dispatch
+        // reservation. Container restarts can orphan it, so release it after
+        // 60s; confirmed provider orders keep the conservative 10-minute sweep.
+        .or(`started_at.is.null,started_at.lt.${tenMinAgo},and(provider_order_id.is.null,started_at.lt.${ghostReservationCutoff})`),
       // 3. Pending engagement runs
       supabase
         .from('organic_run_schedule')

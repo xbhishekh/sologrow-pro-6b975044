@@ -45,21 +45,36 @@ BEFORE INSERT OR UPDATE OF status, provider_order_id, provider_account_id, engag
 ON public.organic_run_schedule
 FOR EACH ROW EXECUTE FUNCTION public.compute_rotation_lock_key();
 
--- Recompute active reservations with the same normalization used by the scheduler.
-UPDATE public.organic_run_schedule rs
-SET rotation_lock_key = lower(regexp_replace(btrim(eo.link), '/$', ''))
-  || '||' || lower(btrim(eoi.engagement_type))
-  || '||' || rs.provider_account_id::text
-FROM public.engagement_order_items eoi
-JOIN public.engagement_orders eo ON eo.id = eoi.engagement_order_id
-WHERE rs.engagement_order_item_id = eoi.id
-  AND lower(btrim(COALESCE(rs.status, ''))) = 'started'
-  AND rs.provider_account_id IS NOT NULL;
-
 UPDATE public.organic_run_schedule
 SET rotation_lock_key = NULL
-WHERE lower(btrim(COALESCE(status, ''))) <> 'started'
-   OR provider_account_id IS NULL;
+WHERE rotation_lock_key IS NOT NULL;
+
+-- Keep one lock holder if historical duplicates already exist. The later rows
+-- represent provider orders that were already paid for, so do not cancel or
+-- resend them; they simply finish normally while the earliest active row holds
+-- the lock against any new duplicate dispatch.
+WITH ranked_active AS (
+  SELECT
+    rs.id,
+    lower(regexp_replace(btrim(eo.link), '/$', ''))
+      || '||' || lower(btrim(eoi.engagement_type))
+      || '||' || rs.provider_account_id::text AS lock_key,
+    row_number() OVER (
+      PARTITION BY lower(regexp_replace(btrim(eo.link), '/$', '')),
+                   lower(btrim(eoi.engagement_type)),
+                   rs.provider_account_id
+      ORDER BY rs.started_at NULLS LAST, rs.id
+    ) AS lock_rank
+  FROM public.organic_run_schedule rs
+  JOIN public.engagement_order_items eoi ON eoi.id = rs.engagement_order_item_id
+  JOIN public.engagement_orders eo ON eo.id = eoi.engagement_order_id
+  WHERE lower(btrim(COALESCE(rs.status, ''))) = 'started'
+    AND rs.provider_account_id IS NOT NULL
+)
+UPDATE public.organic_run_schedule rs
+SET rotation_lock_key = CASE WHEN ranked_active.lock_rank = 1 THEN ranked_active.lock_key ELSE NULL END
+FROM ranked_active
+WHERE rs.id = ranked_active.id;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_rotation_lock
   ON public.organic_run_schedule (rotation_lock_key)

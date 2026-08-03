@@ -50,6 +50,12 @@ rm -f "$tmp_stack"
 
 log "OrganicSMM auth services recreate"
 cd "$SUPABASE_DIR/docker"
+# load_secrets exported the previous values before we regenerated them.
+# Docker Compose gives exported shell variables precedence over docker/.env,
+# so explicitly replace them or Kong/Auth would restart with the old keys.
+export JWT_SECRET="$STACK_JWT_SECRET"
+export ANON_KEY="$STACK_ANON_KEY"
+export SERVICE_ROLE_KEY="$STACK_SERVICE_KEY"
 # Compose labels isolate this operation to this Supabase stack. No other
 # website's compose project or containers are selected.
 docker compose up -d --force-recreate kong auth rest functions

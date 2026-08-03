@@ -2001,7 +2001,18 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
             if (lastError === null || lastError === undefined) lastError = 'Unknown provider error'
             if (typeof lastError !== 'string') lastError = JSON.stringify(lastError)
             providerResult = result
-            
+
+            // Release the rotation lock immediately: the provider request just
+            // failed, so this account is NOT actually holding an active order on
+            // this link+type. Leaving provider_account_id set on this row until
+            // the next candidate is tried keeps uniq_active_rotation_lock held
+            // against selectedAccount, wrongly blocking other queued runs that
+            // want to use it for the same link+type while we rotate away.
+            await supabase.from('organic_run_schedule').update({
+              provider_account_id: null,
+              provider_account_name: null,
+            }).eq('id', run.id).eq('status', 'started').eq('provider_account_id', selectedAccount.id)
+
             const isActiveOrderError = isActiveOrderErrorMsg(lastError)
             if (isActiveOrderError) {
               await new Promise(resolve => setTimeout(resolve, 200))

@@ -93,43 +93,34 @@ if [ -n "$OXAPAY_EFFECTIVE_KEY" ]; then
   sed -i '/^OXAPAY_MERCHANT_API_KEY=/d' .env
   printf 'OXAPAY_MERCHANT_API_KEY=%s\n' "$OXAPAY_EFFECTIVE_KEY" >> .env
 fi
-python3 - <<'PY'
-import os, json
-p = 'docker-compose.override.yml'
-data = {}
-if os.path.exists(p):
-    try:
-        import yaml
-        data = yaml.safe_load(open(p).read()) or {}
-    except Exception:
-        data = {}
-if not isinstance(data, dict):
-    data = {}
-svcs = data.get('services') or {}
-fn = svcs.get('functions') or {}
-envf = fn.get('env_file') or []
-if isinstance(envf, str):
-    envf = [envf]
-if './functions.env' not in envf:
-    envf.append('./functions.env')
-fn['env_file'] = envf
-# Keep an explicit mapping as well. Compose resolves it from docker/.env;
-# this also overrides an empty value inherited from the base compose file.
-env = fn.get('environment') or {}
-if isinstance(env, list):
-    env = dict(e.split('=', 1) for e in env if '=' in e)
-env['ZAPUPI_ZAP_KEY'] = '${ZAPUPI_ZAP_KEY:-}'
-env['OXAPAY_MERCHANT_API_KEY'] = '${OXAPAY_MERCHANT_API_KEY:-}'
-fn['environment'] = env
-svcs['functions'] = fn
-data['services'] = svcs
-# JSON is valid YAML — avoids needing PyYAML for writing.
-open(p, 'w').write(json.dumps(data, indent=2) + "\n")
-PY
-COMPOSE=(docker compose -f "$BASE_COMPOSE" -f "$OVERRIDE_COMPOSE")
+# Never rewrite the installation's own override file — a partial rewrite can
+# drop other services and break the merged config. Instead write a small,
+# self-contained overlay that only patches the `functions` service.
+SMM_COMPOSE="docker-compose.smm-functions.yml"
+cat > "$SMM_COMPOSE" <<'YML'
+services:
+  functions:
+    env_file:
+      - ./functions.env
+    environment:
+      ZAPUPI_ZAP_KEY: ${ZAPUPI_ZAP_KEY:-}
+      OXAPAY_MERCHANT_API_KEY: ${OXAPAY_MERCHANT_API_KEY:-}
+YML
+COMPOSE=(docker compose -f "$BASE_COMPOSE")
+# Include the installation override only if it still merges cleanly.
+if [ -f "$OVERRIDE_COMPOSE" ]; then
+  if docker compose -f "$BASE_COMPOSE" -f "$OVERRIDE_COMPOSE" config >/dev/null 2>&1; then
+    COMPOSE+=(-f "$OVERRIDE_COMPOSE")
+  else
+    log "WARNING: $OVERRIDE_COMPOSE invalid hai, use nahi kar raha"
+  fi
+fi
+COMPOSE+=(-f "$SMM_COMPOSE")
 # Validate the exact same merged config used for recreation.
-"${COMPOSE[@]}" config --services | grep -qx 'functions' \
-  || die "merged compose config me functions service nahi mili"
+if ! "${COMPOSE[@]}" config --services 2>/tmp/smm-compose-config.err | grep -qx 'functions'; then
+  sed -n '1,40p' /tmp/smm-compose-config.err >&2 || true
+  die "merged compose config me functions service nahi mili"
+fi
 # `docker compose up` does not recreate an existing container when only the
 # env_file contents change. Force recreation so rotated/added keys are loaded.
 "${COMPOSE[@]}" up -d --force-recreate --no-deps functions

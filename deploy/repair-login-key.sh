@@ -81,6 +81,14 @@ printf 'VITE_SUPABASE_PROJECT_ID=selfhosted\n' >> "$tmp_env"
 cat "$tmp_env" > "$APP_DIR/.env"
 rm -f "$tmp_env"
 
+# Vite gives already-exported shell variables higher priority than .env.
+# Old VITE_* values can remain exported by the secrets file or root shell and
+# silently produce a successful build containing the stale browser key.
+# Force this build process to use the same accepted key as Kong/Auth.
+export VITE_SUPABASE_URL="https://$APP_DOMAIN"
+export VITE_SUPABASE_PUBLISHABLE_KEY="$STACK_ANON_KEY"
+export VITE_SUPABASE_PROJECT_ID="selfhosted"
+
 log "frontend rebuild (only smmpanel service will restart)"
 cd "$APP_DIR"
 pnpm install --frozen-lockfile || pnpm install

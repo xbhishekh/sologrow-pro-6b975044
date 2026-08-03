@@ -2069,8 +2069,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       } else if (lastError !== null) {
         const retryCount = (run.retry_count || 0) + 1
         const lastErr = (lastError || '').toLowerCase()
-        const isActiveOrderError = isActiveOrderErrorMsg(lastErr)
-        
+
         const postponeMs = isActiveOrderError ? ACTIVE_ORDER_RETRY_MS : TEMPORARY_RETRY_MS
         
         await supabase.from('organic_run_schedule').update({
@@ -2093,7 +2092,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         // this link+type, that run is postponed individually above and the
         // next tick will re-evaluate provider availability.
         results.push({ run_id: run.id, type: item.engagement_type, run_number: run.run_number, 
-          success: false, error: lastError, will_retry: true, retry_attempt: retryCount, postponed_min: postponeMs / 60000 })
+          success: false, error: lastError, will_retry: true, retry_attempt: retryCount, retry_next_tick: true })
       }
 
       // Minimal delay between runs for max throughput
@@ -2333,8 +2332,6 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         const shouldRetry = Boolean(lastError)
         if (shouldRetry) {
           const cleanError = lastError || 'All mapped providers unavailable'
-          const isActiveOrder = isActiveOrderErrorMsg(cleanError)
-          const postponeMs = isActiveOrder ? ACTIVE_ORDER_RETRY_MS : TEMPORARY_RETRY_MS
           await supabase.from('organic_run_schedule').update({
             status: 'pending', started_at: null,
             error_message: `[Will retry] All ${legacyProvidersToTry.length} mapped providers tried: ${cleanError}`,

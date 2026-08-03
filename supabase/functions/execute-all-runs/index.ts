@@ -1032,8 +1032,13 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         .lte('scheduled_at', nowWithBuffer)
         .not('engagement_order_item.status', 'in', '("paused","cancelled")')
         .not('engagement_order_item.engagement_order.status', 'in', '("paused","cancelled")')
-        .order('last_status_check', { ascending: true, nullsFirst: true })
+        // Fetch strict FIFO at the database level. Ordering by last_status_check
+        // first allowed a constant stream of never-checked rows (NULL first) to
+        // fill this 1000-row window, so older overdue runs that had already been
+        // checked once could remain queued forever and never reach the local FIFO
+        // sort below.
         .order('scheduled_at', { ascending: true })
+        .order('run_number', { ascending: true })
         .limit(1000),
       // 4. Failed engagement runs for retry
       supabase
@@ -1304,9 +1309,11 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           const remaining = orderedQty - reservedOrDelivered
           if (remaining <= 0) {
             // Enough quantity is already at providers, but live public count has not
-            // reached target yet. Hold future runs instead of completing early.
+            // reached target yet. Keep future runs due instead of pushing their
+            // schedule forward every cron tick. They remain visibly queued and are
+            // reconsidered immediately after an active reservation is completed or
+            // released, while still preventing over-delivery in this invocation.
             await supabase.from('organic_run_schedule').update({
-              scheduled_at: new Date(Date.now() + ACTIVE_ORDER_RETRY_MS).toISOString(),
               error_message: `Delivery reserved (asked=${observed.askedSent}, observed=${observed.observedByRuns}, public_delta=${observed.publicCountDelta}, public_delta_adj=${observed.adjustedPublicCountDelta}, buffer=${observed.publicDeltaBuffer}, target=${orderedQty}) — awaiting live target count`,
               last_status_check: new Date().toISOString(),
             }).eq('engagement_order_item_id', item.id).eq('status', 'pending')

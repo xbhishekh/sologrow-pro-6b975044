@@ -1769,11 +1769,11 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           const { data: priorRuns } = await supabase
             .from('organic_run_schedule')
             .select('id, status, provider_status, provider_order_id, provider_account_id, provider_account_name, started_at, engagement_order_item:engagement_order_items(engagement_type, engagement_order:engagement_orders(link))')
-            .not('provider_order_id', 'is', null)
             .eq('provider_account_id', selectedAccount.id)
+            .eq('status', 'started')
             .gte('started_at', lookbackIso)
             .order('started_at', { ascending: false })
-            .limit(100)
+            .limit(1000)
 
           const conflictingRun = (priorRuns || []).find((pr: any) => {
             if (pr.id === run.id) return false
@@ -1783,7 +1783,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
             const prLink = normalizeLink(getNestedEngagementOrderLink(pr.engagement_order_item))
             const prType = (pr.engagement_order_item?.engagement_type || '').toLowerCase().trim()
             if (prLink !== sameLink || prType !== currentTypeNormalized) return false
-            if (pr.status === 'started' && !isTerminalProviderStatus(pr.provider_status)) return true
+            if (localStatus === 'started' && !isTerminalProviderStatus(pr.provider_status)) return true
             if (isActiveProviderStatus(pr.provider_status)) return true
             return false
           })
@@ -1841,7 +1841,11 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
 
           runClaimed = true
         } else {
-          await supabase.from('organic_run_schedule').update({
+          // Switching a claimed run to the next provider is another reservation.
+          // Never ignore a unique-lock error here: doing so used to continue into
+          // the provider API call even though that provider was already processing
+          // this same link+type, creating a paid duplicate external order.
+          const { data: switchedReservation, error: switchError } = await supabase.from('organic_run_schedule').update({
             error_message: `Trying ${selectedAccount.name}...`,
             provider_account_id: selectedAccount.id,
             provider_account_name: selectedAccount.name,
@@ -1849,7 +1853,25 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
             provider_status: null,
             provider_response: null,
             last_status_check: new Date().toISOString(),
-          }).eq('id', run.id).eq('status', 'started')
+          }).eq('id', run.id).eq('status', 'started').select('id').maybeSingle()
+
+          if (switchError) {
+            if (switchError.code === '23505' || (switchError.message || '').includes('uniq_active_rotation_lock')) {
+              console.log(`🔒 Run #${run.run_number}: ${selectedAccount.name} became busy during provider switch; trying next provider`)
+              lastError = `${selectedAccount.name} reserved concurrently — trying next provider`
+              continue
+            }
+            console.error(`❌ Failed to switch run #${run.run_number} reservation to ${selectedAccount.name}:`, switchError)
+            lastError = `Provider reservation failed: ${switchError.message || 'unknown error'}`
+            break
+          }
+
+          if (!switchedReservation) {
+            console.log(`⏭️ Run #${run.run_number} is no longer active; provider send cancelled`)
+            skipped++
+            lastError = null
+            break
+          }
         }
 
         try {

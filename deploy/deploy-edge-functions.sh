@@ -7,6 +7,17 @@ FN_SRC="$APP_DIR/supabase/functions"
 FN_DST="$SUPABASE_DIR/docker/volumes/functions"
 [ -d "$FN_SRC" ] || die "$FN_SRC nahi mila"
 
+# Keep the DB-side rotation reservation in sync with the scheduler. Earlier
+# deploys copied only edge-function code, so a VPS could run new scheduler code
+# without the atomic unique lock and send duplicate orders to one provider.
+ROTATION_LOCK_SQL="$APP_DIR/deploy/rotation-lock.sql"
+[ -f "$ROTATION_LOCK_SQL" ] || die "$ROTATION_LOCK_SQL nahi mila"
+log "same-link provider rotation lock -> database"
+vpsql_file_soft "$ROTATION_LOCK_SQL"
+ROTATION_LOCK_READY="$(vpsql -Atc "select case when to_regclass('public.uniq_active_rotation_lock') is not null and exists (select 1 from pg_trigger where tgname='trg_compute_rotation_lock_key' and tgrelid='public.organic_run_schedule'::regclass and not tgisinternal) then 'yes' else 'no' end;")"
+[ "$ROTATION_LOCK_READY" = "yes" ] || die "provider rotation DB lock apply nahi hua"
+ok "same link+type par same provider duplicate lock active"
+
 log "functions copy: $FN_SRC -> $FN_DST"
 mkdir -p "$FN_DST"
 rsync -a --delete --exclude '*_test.ts' "$FN_SRC"/ "$FN_DST"/

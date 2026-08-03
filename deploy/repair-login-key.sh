@@ -151,6 +151,70 @@ systemctl is-active --quiet smmpanel || {
 STABLE_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/" || true)
 [ "$STABLE_CODE" = "200" ] || die "frontend became unavailable after startup (HTTP $STABLE_CODE)"
 
+# Repair only this domain's Caddy block. On multi-project VPS installations an
+# older OrganicSMM block/upstream can keep serving a stale build even though the
+# new service on :3000 is healthy. Preserve every other website in Caddyfile.
+CADDYFILE=/etc/caddy/Caddyfile
+[ -f "$CADDYFILE" ] || die "Caddyfile missing: $CADDYFILE"
+cp "$CADDYFILE" "$CADDYFILE.login-repair.bak"
+APP_DOMAIN="$APP_DOMAIN" python3 - "$CADDYFILE" <<'PY'
+import os
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+domain = os.environ["APP_DOMAIN"]
+lines = path.read_text().splitlines(keepends=True)
+replacement = f'''{domain} {{
+\tencode zstd gzip
+
+\t@organicsmm_api path /rest/v1/* /auth/v1/* /functions/v1/* /storage/v1/* /realtime/v1/* /graphql/v1/*
+\thandle @organicsmm_api {{
+\t\treverse_proxy 127.0.0.1:8000
+\t}}
+
+\thandle {{
+\t\treverse_proxy 127.0.0.1:3000
+\t}}
+}}
+'''
+
+result = []
+found = False
+i = 0
+while i < len(lines):
+    stripped = lines[i].strip()
+    if stripped == f"{domain} {{":
+        if not found:
+            result.append(replacement)
+            found = True
+        depth = lines[i].count("{") - lines[i].count("}")
+        i += 1
+        while i < len(lines) and depth > 0:
+            depth += lines[i].count("{") - lines[i].count("}")
+            i += 1
+        continue
+    result.append(lines[i])
+    i += 1
+
+if not found:
+    if result and not result[-1].endswith("\n"):
+        result[-1] += "\n"
+    result.extend(["\n", replacement])
+path.write_text("".join(result))
+PY
+
+if ! caddy validate --config "$CADDYFILE"; then
+  cp "$CADDYFILE.login-repair.bak" "$CADDYFILE"
+  die "OrganicSMM Caddy route repair was invalid; original config restored"
+fi
+systemctl reload caddy || {
+  cp "$CADDYFILE.login-repair.bak" "$CADDYFILE"
+  systemctl reload caddy || true
+  die "Caddy reload failed; original config restored"
+}
+ok "OrganicSMM Caddy route pinned to 127.0.0.1:3000 (other websites unchanged)"
+
 PUBLIC_CODE=$(curl -sS -o /tmp/organicsmm-public-auth-health.json -w '%{http_code}' \
   -H "apikey: $STACK_ANON_KEY" "https://$APP_DOMAIN/auth/v1/health" || true)
 [ "$PUBLIC_CODE" = "200" ] || die "public auth health failed after repair (HTTP $PUBLIC_CODE)"

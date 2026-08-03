@@ -1550,13 +1550,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       let availableAccounts = await mappingCache.getForService(
         supabase, item.service.id, busyAccountIds, executionId
       )
-      if (availableAccounts.length === 0 && mappingCache.hasConfiguredMappingForService(item.service.id) && busyAccountIds.length > 0) {
-        const allMappedAccounts = await mappingCache.getForService(supabase, item.service.id, [], executionId)
-        if (allMappedAccounts.length > 0) {
-          availableAccounts = allMappedAccounts
-          console.log(`🔓 Run #${run.run_number}: bypassing stale busy pre-filter; trying all ${allMappedAccounts.length} mapped providers by priority`)
-        }
-      }
+      // Never re-add accounts that are actively processing this same link+type.
+      // Doing so defeated rotation and could select the same provider again while
+      // another mapped provider was free. The next cron tick will re-check live
+      // statuses and release an account as soon as its active run is terminal.
       
       // STRICT MAPPING MODE — no automatic default-provider fallback.
       // Only providers explicitly mapped via service_provider_mapping for this

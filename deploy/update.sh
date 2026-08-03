@@ -4,6 +4,14 @@
 set -euo pipefail
 . "$(dirname "$0")/_common.sh"
 load_secrets
+# Prefer current directory if it contains package.json and we are not already in it
+if [ -f "package.json" ] && [ -d "deploy" ]; then
+  CURRENT_DIR="$(pwd)"
+  if [ "$CURRENT_DIR" != "${APP_DIR:-}" ]; then
+    log "Using current directory as APP_DIR: $CURRENT_DIR"
+    APP_DIR="$CURRENT_DIR"
+  fi
+fi
 cd "$APP_DIR"
 
 log "git pull"

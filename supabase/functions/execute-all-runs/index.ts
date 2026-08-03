@@ -2068,9 +2068,6 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         await updateEngagementOrderStatus(supabase, item.engagement_order_id, item.id)
       } else if (lastError !== null) {
         const retryCount = (run.retry_count || 0) + 1
-        const lastErr = (lastError || '').toLowerCase()
-
-        const postponeMs = isActiveOrderError ? ACTIVE_ORDER_RETRY_MS : TEMPORARY_RETRY_MS
         
         await supabase.from('organic_run_schedule').update({
           status: 'pending', started_at: null,

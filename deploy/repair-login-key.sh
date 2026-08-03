@@ -111,6 +111,32 @@ fi
 
 NODE_BIN=$(command -v node)
 [ -x "$NODE_BIN" ] || die "node executable not found"
+
+# Smoke-test the static server in the foreground first, so a crash shows the
+# real error instead of hiding behind systemd's restart loop.
+log "static server smoke test (node $("$NODE_BIN" -v 2>/dev/null || echo unknown))"
+SMOKE_LOG=$(mktemp)
+"$NODE_BIN" "$APP_DIR/deploy/static-server.mjs" "$APP_DIR/dist" 3000 >"$SMOKE_LOG" 2>&1 &
+SMOKE_PID=$!
+SMOKE_OK=0
+for _ in $(seq 1 10); do
+  if curl -sS -o /dev/null "http://127.0.0.1:3000/" 2>/dev/null; then SMOKE_OK=1; break; fi
+  kill -0 "$SMOKE_PID" 2>/dev/null || break
+  sleep 1
+done
+kill "$SMOKE_PID" 2>/dev/null || true
+wait "$SMOKE_PID" 2>/dev/null || true
+if [ "$SMOKE_OK" != "1" ]; then
+  printf '%s\n' "--- static-server output ---"
+  cat "$SMOKE_LOG" || true
+  printf '%s\n' "--- port 3000 holders ---"
+  (ss -ltnp 2>/dev/null | grep ':3000' || echo "nothing listening on 3000")
+  rm -f "$SMOKE_LOG"
+  die "static server cannot bind/serve on port 3000 (see output above)"
+fi
+rm -f "$SMOKE_LOG"
+ok "static server smoke test passed"
+
 cat > /etc/systemd/system/smmpanel.service <<UNIT
 [Unit]
 Description=OrganicSMM frontend (static)
@@ -119,11 +145,11 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$APP_DIR
-ExecStart="$NODE_BIN" "$APP_DIR/deploy/static-server.mjs" "$APP_DIR/dist" 3000
+ExecStart=$NODE_BIN $APP_DIR/deploy/static-server.mjs $APP_DIR/dist 3000
 Restart=always
 RestartSec=2
 NoNewPrivileges=true
-PrivateTmp=true
+PrivateTmp=false
 
 [Install]
 WantedBy=multi-user.target
@@ -131,14 +157,17 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable smmpanel >/dev/null 2>&1
-systemctl restart smmpanel
-systemctl is-active --quiet smmpanel || die "smmpanel failed to restart"
+systemctl restart smmpanel || true
 
 # Wait for bind
 FRONT_CODE="000"
-for _ in $(seq 1 30); do
-  FRONT_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/" || true)
+for i in $(seq 1 20); do
+  FRONT_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/" 2>/dev/null || true)
   [ "$FRONT_CODE" = "200" ] && break
+  if [ "$i" = "5" ]; then
+    printf '%s\n' "--- early smmpanel logs ---"
+    journalctl -u smmpanel -n 30 --no-pager || true
+  fi
   sleep 2
 done
 if [ "$FRONT_CODE" != "200" ]; then

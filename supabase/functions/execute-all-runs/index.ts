@@ -1512,6 +1512,13 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
             }
           } else if (stuckRun.provider_account_id) {
             if (hasUncertainDispatch(stuckRun)) {
+              // The provider request may already have been accepted even though
+              // we did not receive an order id. Keep this account reserved for
+              // the same link+type to avoid a duplicate, but let the queued run
+              // rotate immediately to another mapped provider.
+              if (!busyAccountIds.includes(stuckRun.provider_account_id)) {
+                busyAccountIds.push(stuckRun.provider_account_id)
+              }
               console.log(`🛑 Holding run #${stuckRun.run_number}: provider dispatch uncertain, skipping resend until manual/provider confirmation`)
               skipped++
               continue
@@ -2040,7 +2047,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
                 }
               : {}),
             last_status_check: verifiedLastStatusCheck || new Date().toISOString(),
-          }).eq('id', run.id).eq('status', 'started'),
+          }).eq('id', run.id).eq('status', 'started').select('id'),
           supabase.from('engagement_order_items').update({ status: 'processing' })
             .eq('id', item.id).not('status', 'in', '("cancelled","paused")'),
           supabase.from('engagement_orders').update({ status: 'processing' })

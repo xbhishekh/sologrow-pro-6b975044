@@ -32,7 +32,12 @@ function safeAssetPath(pathname) {
     return undefined;
   }
 
-  const relative = normalize(decoded).replace(/^[/\]+/, "");
+  // Strip leading separators without a regex so shell/copy escaping cannot
+  // corrupt this source file during VPS deployment.
+  let relative = normalize(decoded);
+  while (relative.startsWith("/") || relative.startsWith("\\")) {
+    relative = relative.slice(1);
+  }
   const candidate = resolve(join(root, relative));
   // Robust check: candidate must be within root. 
   // We use a trailing slash to avoid matching /opt/dist-backup with /opt/dist prefix.

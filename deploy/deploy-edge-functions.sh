@@ -117,18 +117,37 @@ services:
       ZAPUPI_ZAP_KEY: ${ZAPUPI_ZAP_KEY:-}
       OXAPAY_MERCHANT_API_KEY: ${OXAPAY_MERCHANT_API_KEY:-}
 YML
-COMPOSE=(docker compose -f "$BASE_COMPOSE")
-# Include the installation override only if it still merges cleanly.
-if [ -f "$OVERRIDE_COMPOSE" ]; then
-  if docker compose -f "$BASE_COMPOSE" -f "$OVERRIDE_COMPOSE" config >/dev/null 2>&1; then
-    COMPOSE+=(-f "$OVERRIDE_COMPOSE")
-  else
-    log "WARNING: $OVERRIDE_COMPOSE invalid hai, use nahi kar raha"
+# Some installations export COMPOSE_FILE / COMPOSE_PROFILES which silently
+# changes which files docker compose reads. Neutralise that here.
+unset COMPOSE_FILE COMPOSE_PATH_SEPARATOR
+
+# Try candidate file combinations and use the first one that actually exposes
+# a `functions` service. This survives installs where `functions` is defined
+# only in the override file, or where the override does not merge cleanly.
+pick_compose() {
+  local -a candidates=()
+  if [ -f "$OVERRIDE_COMPOSE" ]; then
+    candidates+=("-f|$BASE_COMPOSE|-f|$OVERRIDE_COMPOSE|-f|$SMM_COMPOSE")
+    candidates+=("-f|$OVERRIDE_COMPOSE|-f|$SMM_COMPOSE")
   fi
-fi
-COMPOSE+=(-f "$SMM_COMPOSE")
-# Validate the exact same merged config used for recreation.
-if ! "${COMPOSE[@]}" config --services 2>/tmp/smm-compose-config.err | grep -qx 'functions'; then
+  candidates+=("-f|$BASE_COMPOSE|-f|$SMM_COMPOSE")
+  candidates+=("-f|$BASE_COMPOSE")
+  local c
+  for c in "${candidates[@]}"; do
+    local -a args=()
+    IFS='|' read -r -a args <<< "$c"
+    if docker compose "${args[@]}" config --services 2>/tmp/smm-compose-config.err \
+         | grep -qx 'functions'; then
+      COMPOSE=(docker compose "${args[@]}")
+      return 0
+    fi
+  done
+  return 1
+}
+if ! pick_compose; then
+  log "compose files present:"; ls -1 *.yml *.yaml 2>/dev/null >&2 || true
+  log "services seen in base compose:"
+  docker compose -f "$BASE_COMPOSE" config --services >&2 2>/dev/null || true
   sed -n '1,40p' /tmp/smm-compose-config.err >&2 || true
   die "merged compose config me functions service nahi mili"
 fi

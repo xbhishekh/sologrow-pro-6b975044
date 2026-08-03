@@ -2187,8 +2187,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
       )
       const hasLegacyMapping = mappingCache.hasConfiguredMappingForService(order.service.id)
 
-      let provider: any = null
-      let providerServiceIdOverride: string | null = null
+      let legacyProvidersToTry: Array<{ provider: any; providerServiceId: string }> = []
 
       if (hasLegacyMapping) {
         if (mappedAccountsLegacy.length === 0) {
@@ -2201,15 +2200,22 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           skipped++
           continue
         }
-        const chosen = mappedAccountsLegacy[0]
-        provider = {
-          id: chosen.account.id,
-          provider_id: chosen.account.provider_id,
-          name: chosen.account.name,
-          api_key: chosen.account.api_key,
-          api_url: chosen.account.api_url,
-        }
-        providerServiceIdOverride = chosen.providerServiceId || null
+        // Try every mapped account in strict admin priority order. Previously
+        // legacy runs selected only mappedAccountsLegacy[0], so an active-link
+        // or inactive-service error on priority 1 incorrectly queued the run
+        // even while lower-priority providers were available.
+        legacyProvidersToTry = mappedAccountsLegacy
+          .sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999))
+          .map((candidate) => ({
+            provider: {
+              id: candidate.account.id,
+              provider_id: candidate.account.provider_id,
+              name: candidate.account.name,
+              api_key: candidate.account.api_key,
+              api_url: candidate.account.api_url,
+            },
+            providerServiceId: candidate.providerServiceId,
+          }))
       } else {
         // No mapping configured — wait until admin maps a provider in
         // Admin → Service Provider Mapping. Do NOT fall back to service.provider_id.
@@ -2223,9 +2229,9 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         continue
       }
 
-      if (!provider || !isValidHttpUrl(provider.api_url)) {
+      if (legacyProvidersToTry.length === 0) {
         await supabase.from('organic_run_schedule').update({
-          status: 'failed', error_message: 'Mapped provider has invalid API URL',
+          status: 'failed', error_message: 'No valid mapped provider is available',
         }).eq('id', run.id)
         failed++
         continue
@@ -2246,13 +2252,21 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
 
       let lastError: string | null = null
       let providerOrderId: string | null = null
+      let successfulLegacyProvider: any = null
 
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
+      for (const { provider, providerServiceId } of legacyProvidersToTry) {
+        if (!isValidHttpUrl(provider.api_url)) {
+          lastError = `${provider.name}: invalid API URL`
+          continue
+        }
+
+        console.log(`🔄 Legacy run #${run.run_number}: trying ${provider.name}`)
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
           const formData = new URLSearchParams()
           formData.append('key', provider.api_key)
           formData.append('action', 'add')
-          formData.append('service', providerServiceIdOverride || order.service.provider_service_id)
+          formData.append('service', providerServiceId || order.service.provider_service_id)
           formData.append('link', sanitizeProviderLink(order.link))
           formData.append('quantity', run.quantity_to_send.toString())
 
@@ -2269,17 +2283,23 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           if (result.status === 'fail' || result.error) {
             lastError = result.message || result.error
             if (typeof lastError !== 'string') lastError = JSON.stringify(lastError)
+            console.log(`↪️ Legacy provider ${provider.name} rejected run #${run.run_number}: ${lastError}`)
+            const shouldRotate = isActiveOrderErrorMsg(lastError!)
+              || ACCOUNT_SPECIFIC_ERRORS.some(err => lastError!.toLowerCase().includes(err.toLowerCase()))
+              || TRY_NEXT_PROVIDER_ERRORS.some(err => lastError!.toLowerCase().includes(err.toLowerCase()))
+            if (shouldRotate) break
             const isTemporaryError = TEMPORARY_ERRORS.some(err => lastError!.toLowerCase().includes(err.toLowerCase()))
-            if (isTemporaryError) { lastError = `TEMP_ERROR: ${lastError}`; break }
+            if (isTemporaryError) break
             if (attempt < MAX_RETRIES) {
               await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt))
               retried++; continue
             }
           } else {
             providerOrderId = result.order?.toString() || result.id?.toString()
+            successfulLegacyProvider = provider
             break
           }
-        } catch (fetchError: any) {
+          } catch (fetchError: any) {
           const uncertainDispatchAt = new Date().toISOString()
           await supabase.from('organic_run_schedule').update({
             status: 'started',
@@ -2297,23 +2317,30 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
           lastError = null
           skipped++
           break
+          }
         }
+        if (providerOrderId || lastError === null) break
       }
 
       if (providerOrderId) {
-        await supabase.from('organic_run_schedule').update({ provider_order_id: providerOrderId }).eq('id', run.id)
+        await supabase.from('organic_run_schedule').update({
+          provider_order_id: providerOrderId,
+          provider_account_id: successfulLegacyProvider?.id || null,
+          provider_account_name: successfulLegacyProvider?.name || null,
+          error_message: null,
+        }).eq('id', run.id)
         await supabase.from('orders').update({ status: 'processing' }).eq('id', order.id)
         processed++
       } else {
-        const isTemporaryError = lastError?.startsWith('TEMP_ERROR:')
-        if (isTemporaryError) {
-          const cleanError = lastError?.replace('TEMP_ERROR: ', '') || ''
+        const shouldRetry = Boolean(lastError)
+        if (shouldRetry) {
+          const cleanError = lastError || 'All mapped providers unavailable'
           const isActiveOrder = isActiveOrderErrorMsg(cleanError)
           const postponeMs = isActiveOrder ? ACTIVE_ORDER_RETRY_MS : TEMPORARY_RETRY_MS
           await supabase.from('organic_run_schedule').update({
             status: 'pending', started_at: null,
             scheduled_at: new Date(Date.now() + postponeMs).toISOString(),
-            error_message: `[Will retry] ${cleanError}`,
+            error_message: `[Will retry] All ${legacyProvidersToTry.length} mapped providers tried: ${cleanError}`,
           }).eq('id', run.id)
           skipped++
         } else {

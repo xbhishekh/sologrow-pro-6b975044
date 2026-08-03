@@ -17,6 +17,7 @@ const TEMPORARY_RETRY_MS = 60 * 1000
 
 // Inline status-check cache for this execution (avoids re-polling same account row).
 const inlineProviderAccountCache = new Map<string, { api_key: string; api_url: string } | null>()
+const inlineRunStatusCache = new Map<string, { run: any; checkedAt: number }>()
 const TERMINAL_PROVIDER_STATUSES = new Set([
   'completed','complete','partial','refunded','canceled','cancelled','error','failed','success','refund','canscelled',
 ])
@@ -24,11 +25,24 @@ const TERMINAL_PROVIDER_STATUSES = new Set([
 async function inlineRefreshRunStatus(supabase: SupabaseClient, run: any): Promise<any> {
   try {
     if (!run?.provider_order_id || !run?.provider_account_id) return run
+    // activeRuns is a snapshot reused for every queued sibling in this invocation.
+    // Without this cache, the same active provider order was polled once per queued
+    // row (up to 8s each), exhausting the 50s scheduler window after ~2 providers.
+    // Reuse the fresh result so the loop can reach every other mapped provider.
+    const cachedRun = inlineRunStatusCache.get(run.id)
+    if (cachedRun && Date.now() - cachedRun.checkedAt < 25_000) return cachedRun.run
+
     const lastCheck = run.last_status_check ? new Date(run.last_status_check).getTime() : 0
     // Only re-poll if we haven't checked in the last 25s (cron is every 1-2min, this is the inline safety net)
-    if (Date.now() - lastCheck < 25_000) return run
+    if (Date.now() - lastCheck < 25_000) {
+      inlineRunStatusCache.set(run.id, { run, checkedAt: Date.now() })
+      return run
+    }
     const curStatus = (run.provider_status || '').toLowerCase()
-    if (TERMINAL_PROVIDER_STATUSES.has(curStatus)) return run
+    if (TERMINAL_PROVIDER_STATUSES.has(curStatus)) {
+      inlineRunStatusCache.set(run.id, { run, checkedAt: Date.now() })
+      return run
+    }
 
     let acct = inlineProviderAccountCache.get(run.provider_account_id)
     if (acct === undefined) {
@@ -40,7 +54,10 @@ async function inlineRefreshRunStatus(supabase: SupabaseClient, run: any): Promi
       acct = data && data.api_key && data.api_url ? { api_key: data.api_key, api_url: data.api_url } : null
       inlineProviderAccountCache.set(run.provider_account_id, acct)
     }
-    if (!acct) return run
+    if (!acct) {
+      inlineRunStatusCache.set(run.id, { run, checkedAt: Date.now() })
+      return run
+    }
 
     const formData = new URLSearchParams()
     formData.append('key', acct.api_key)
@@ -63,7 +80,10 @@ async function inlineRefreshRunStatus(supabase: SupabaseClient, run: any): Promi
       clearTimeout(timeoutId)
     }
 
-    if (!result || result.error) return run
+    if (!result || result.error) {
+      inlineRunStatusCache.set(run.id, { run, checkedAt: Date.now() })
+      return run
+    }
 
     const providerStatus = result.status || result.Status || run.provider_status
     const remains = result.remains !== undefined ? Number(result.remains) : run.provider_remains
@@ -78,7 +98,7 @@ async function inlineRefreshRunStatus(supabase: SupabaseClient, run: any): Promi
       last_status_check: new Date().toISOString(),
     }).eq('id', run.id)
 
-    return {
+    const refreshedRun = {
       ...run,
       provider_status: providerStatus,
       provider_remains: Number.isFinite(remains) ? remains : run.provider_remains,
@@ -86,7 +106,10 @@ async function inlineRefreshRunStatus(supabase: SupabaseClient, run: any): Promi
       provider_charge: Number.isFinite(charge) ? charge : run.provider_charge,
       last_status_check: new Date().toISOString(),
     }
+    inlineRunStatusCache.set(run.id, { run: refreshedRun, checkedAt: Date.now() })
+    return refreshedRun
   } catch (_e) {
+    if (run?.id) inlineRunStatusCache.set(run.id, { run, checkedAt: Date.now() })
     return run
   }
 }
@@ -1483,28 +1506,6 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         const runType = (r.engagement_order_item?.engagement_type || '').toLowerCase()
         return runLink === sameLink && runType === currentTypeNormalized
       })
-      
-      // ROUND-ROBIN: Prefer a different provider after a recent completion,
-      // but do NOT hard-block the just-used provider.
-      // Otherwise next run can get stuck even after the previous one is completed.
-      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-      const { data: recentCompletedRuns } = await supabase
-        .from('organic_run_schedule')
-        .select('provider_account_id, engagement_order_item:engagement_order_items(engagement_type, engagement_order:engagement_orders(link))')
-        .eq('status', 'completed')
-        .not('provider_account_id', 'is', null)
-        .gte('completed_at', fiveMinAgo)
-      
-      const recentCompletedAccountIds = new Set<string>()
-      if (recentCompletedRuns) {
-        for (const rcr of recentCompletedRuns) {
-          const rcrLink = normalizeLink(getNestedEngagementOrderLink(rcr.engagement_order_item))
-          const rcrType = (rcr.engagement_order_item?.engagement_type || '').toLowerCase()
-          if (rcrLink === sameLink && rcrType === currentTypeNormalized && rcr.provider_account_id) {
-            recentCompletedAccountIds.add(rcr.provider_account_id)
-          }
-        }
-      }
       
       if (startedRunsForLink && startedRunsForLink.length > 0) {
         for (let stuckRun of startedRunsForLink) {

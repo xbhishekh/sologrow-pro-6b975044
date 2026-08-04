@@ -30,13 +30,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ALWAYS start loading as true to avoid redirecting before Supabase fetch completes
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchUserData = useCallback(async (userId: string) => {
+  const fetchUserData = useCallback(async (userId: string, attempt = 0) => {
     try {
       const [profileResult, walletResult, roleResult] = await Promise.all([
-        supabase.from('profiles').select('*').eq('user_id', userId).single(),
-        supabase.from('wallets').select('*').eq('user_id', userId).single(),
+        supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle(),
+        supabase.from('wallets').select('*').eq('user_id', userId).maybeSingle(),
         supabase.from('user_roles').select('role').eq('user_id', userId),
       ]);
+
+      // Network hiccup pe role/profile miss ho jaata tha (admin panel khaali dikhta tha) — ek retry
+      const failed = !!profileResult.error || !!roleResult.error;
+      if (failed && attempt < 2) {
+        setTimeout(() => { void fetchUserData(userId, attempt + 1); }, 1200 * (attempt + 1));
+        return;
+      }
 
       if (profileResult.data) setProfile(profileResult.data as unknown as Profile);
       if (walletResult.data) setWallet(walletResult.data as Wallet);
@@ -52,6 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
+      if (attempt < 2) {
+        setTimeout(() => { void fetchUserData(userId, attempt + 1); }, 1200 * (attempt + 1));
+      }
     }
   }, []);
 

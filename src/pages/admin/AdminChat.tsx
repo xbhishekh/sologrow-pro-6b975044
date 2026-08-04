@@ -129,7 +129,8 @@ export default function AdminChat() {
       if (error) throw error;
       return data as ChatConversation[];
     },
-    refetchInterval: 5000,
+    // Realtime subscription instant update deti hai — polling sirf safety net hai
+    refetchInterval: 20000,
   });
 
   // Fetch messages for selected conversation
@@ -157,7 +158,7 @@ export default function AdminChat() {
       return data as ChatMessage[];
     },
     enabled: !!selectedConversation,
-    refetchInterval: 2000,
+    refetchInterval: 8000,
   });
 
   // Subscribe to realtime for new messages

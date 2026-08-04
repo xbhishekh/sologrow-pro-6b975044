@@ -54,9 +54,21 @@ export default function Admin() {
     refetchOnWindowFocus: true,
   });
 
-  // Fallback: agar RPC 0/fail de to direct tables se paginated aggregate
+  // RPC ne valid data diya? Tab heavy fallback bilkul mat chalao.
+  const rpcHasStats =
+    !!dashboardStats &&
+    (Number(dashboardStats.total_deposits || 0) > 0 ||
+      Number(dashboardStats.total_wallet_balance || 0) > 0 ||
+      Number(dashboardStats.deposits_count || 0) > 0);
+
+  // Fallback: sirf tab jab RPC fail/0 de — poore transactions table ko scan karta hai,
+  // isliye ise kabhi bhi background me repeat nahi karne dena.
   const { data: depositFallback } = useQuery({
     queryKey: ['admin-deposit-fallback'],
+    enabled: !statsLoading && !rpcHasStats,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const pageSize = 1000;
       let from = 0;
@@ -65,13 +77,14 @@ export default function Admin() {
       let today = 0;
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
-      // deposits
-      for (;;) {
+      // deposits (max 20 pages = 20k rows, warna admin dashboard hang ho jata hai)
+      for (let page = 0; page < 20; page++) {
         const { data, error } = await supabase
           .from('transactions')
           .select('amount, created_at')
           .eq('type', 'deposit')
           .eq('status', 'completed')
+          .order('created_at', { ascending: false })
           .range(from, from + pageSize - 1);
         if (error) throw error;
         const rows = data || [];
@@ -87,7 +100,7 @@ export default function Admin() {
       // wallets live balance
       let wFrom = 0;
       let walletTotal = 0;
-      for (;;) {
+      for (let page = 0; page < 20; page++) {
         const { data, error } = await supabase
           .from('wallets')
           .select('balance')
@@ -100,7 +113,6 @@ export default function Admin() {
       }
       return { total, count, today, walletTotal };
     },
-    refetchInterval: 30000,
   });
 
   useEffect(() => {

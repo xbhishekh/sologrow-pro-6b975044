@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/hooks/useAuth';
@@ -100,6 +100,9 @@ export default function AdminUsers() {
   const [refundOnCancel, setRefundOnCancel] = useState(false);
   const [banUser, setBanUser] = useState<UserProfile | null>(null);
   const [banReason, setBanReason] = useState('');
+  // Sirf itne cards ek baar me render honge — warna 1000+ users pe browser hang ho jata hai
+  const RENDER_PAGE_SIZE = 60;
+  const [visibleCount, setVisibleCount] = useState(RENDER_PAGE_SIZE);
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['admin-all-users-with-subs'],
@@ -568,20 +571,19 @@ export default function AdminUsers() {
     return (u.orderCounts?.singleActive || 0) + (u.orderCounts?.engagementActive || 0);
   };
 
-  // Filter users based on tab
-  const getFilteredUsers = () => {
+  // Filter users based on tab — memoized taaki har render pe hazaaron rows dubara filter na ho
+  const filteredUsers = useMemo(() => {
     let filtered = users || [];
 
-    // Search filter
-    if (searchQuery) {
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
       filtered = filtered.filter(
         (u) =>
-          u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          u.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+          u.email.toLowerCase().includes(q) ||
+          u.full_name?.toLowerCase().includes(q)
       );
     }
 
-    // Tab filter
     switch (activeTab) {
       case 'normal':
         return filtered.filter(
@@ -598,15 +600,38 @@ export default function AdminUsers() {
       default:
         return filtered;
     }
-  };
+  }, [users, searchQuery, activeTab]);
 
-  const filteredUsers = getFilteredUsers();
+  // Tab / search badalne par list wapas top se
+  useEffect(() => {
+    setVisibleCount(RENDER_PAGE_SIZE);
+  }, [searchQuery, activeTab]);
 
-  // Stats
-  const totalBalance = users?.reduce((sum, u) => sum + (u.wallet?.balance || 0), 0) || 0;
-  const normalCount = users?.filter((u) => !u.subscription || u.subscription.status !== 'active').length || 0;
-  const monthlyCount = users?.filter((u) => u.subscription?.status === 'active' && u.subscription?.plan_type === 'monthly').length || 0;
-  const lifetimeCount = users?.filter((u) => u.subscription?.status === 'active' && u.subscription?.plan_type === 'lifetime').length || 0;
+  const visibleUsers = useMemo(
+    () => filteredUsers.slice(0, visibleCount),
+    [filteredUsers, visibleCount]
+  );
+
+  // Stats — ek hi pass me, har render pe 4 baar poori list scan nahi
+  const { totalBalance, normalCount, monthlyCount, lifetimeCount } = useMemo(() => {
+    let balance = 0;
+    let normal = 0;
+    let monthly = 0;
+    let lifetime = 0;
+    for (const u of users || []) {
+      balance += u.wallet?.balance || 0;
+      const sub = u.subscription;
+      if (!sub || sub.status !== 'active') normal += 1;
+      else if (sub.plan_type === 'monthly') monthly += 1;
+      else if (sub.plan_type === 'lifetime') lifetime += 1;
+    }
+    return {
+      totalBalance: balance,
+      normalCount: normal,
+      monthlyCount: monthly,
+      lifetimeCount: lifetime,
+    };
+  }, [users]);
 
   // Wait for auth to load before checking admin status
   if (authLoading) {
@@ -763,7 +788,7 @@ export default function AdminUsers() {
           </div>
         ) : filteredUsers && filteredUsers.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredUsers.map((u) => (
+            {visibleUsers.map((u) => (
               <Card
                 key={u.id}
                 className="glass-card hover:border-primary/30 transition-all group"
@@ -963,6 +988,22 @@ export default function AdminUsers() {
             <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">No users found</p>
           </Card>
+        )}
+
+        {/* Load more — poori list ek saath render karne se browser freeze hota tha */}
+        {!isLoading && filteredUsers.length > visibleUsers.length && (
+          <div className="flex flex-col items-center gap-2 pt-2">
+            <p className="text-xs text-muted-foreground">
+              Showing {visibleUsers.length} of {filteredUsers.length} users
+            </p>
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => setVisibleCount((c) => c + RENDER_PAGE_SIZE)}
+            >
+              Load more users
+            </Button>
+          </div>
         )}
 
         {/* Balance Dialog */}

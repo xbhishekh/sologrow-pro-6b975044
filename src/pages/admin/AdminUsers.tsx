@@ -100,6 +100,9 @@ export default function AdminUsers() {
   const [refundOnCancel, setRefundOnCancel] = useState(false);
   const [banUser, setBanUser] = useState<UserProfile | null>(null);
   const [banReason, setBanReason] = useState('');
+  // Sirf itne cards ek baar me render honge — warna 1000+ users pe browser hang ho jata hai
+  const RENDER_PAGE_SIZE = 60;
+  const [visibleCount, setVisibleCount] = useState(RENDER_PAGE_SIZE);
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['admin-all-users-with-subs'],

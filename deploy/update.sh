@@ -38,7 +38,11 @@ rm -rf dist-old
 ok "dist swapped"
 
 log "edge functions sync"
-bash "$(dirname "$0")/deploy-edge-functions.sh" >/dev/null 2>&1 && ok "functions redeployed" || log "functions sync skip"
+if bash "$(dirname "$0")/deploy-edge-functions.sh"; then
+  ok "functions redeployed + payment key verified"
+else
+  die "edge functions/payment key sync failed — frontend restart roka gaya"
+fi
 
 log "restart"
 systemctl restart smmpanel

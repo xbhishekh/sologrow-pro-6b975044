@@ -315,12 +315,64 @@ serve(async (req) => {
     const serviceIds = [...new Set(engagements.map((e: any) => e.service_id).filter(Boolean))]
     const { data: svcRows, error: svcErr } = await supabase
       .from('services')
-      .select('id, price, min_quantity, max_quantity, is_active')
+      .select('id, name, price, min_quantity, max_quantity, is_active')
       .in('id', serviceIds)
     if (svcErr || !svcRows || svcRows.length !== serviceIds.length) {
       return new Response(JSON.stringify({ error: 'Invalid service in engagements' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
     const svcMap = new Map(svcRows.map((s: any) => [s.id, s]))
+
+    // A bundle service can rotate through several provider accounts/services.
+    // Validate against the lowest ACTIVE route minimum, not only the linked
+    // catalog row. The client already presents the rotation-pool minimum; using
+    // the linked row here caused valid orders to be rejected with a UUID error.
+    const routeMinimums = new Map<string, number>()
+    if (serviceIds.length > 0) {
+      const { data: routeRows } = await supabase
+        .from('service_provider_mapping')
+        .select('service_id, provider_service_id, provider_account:provider_accounts(provider_id, is_active)')
+        .in('service_id', serviceIds)
+        .eq('is_active', true)
+
+      const activeRoutes = (routeRows || []).filter((route: any) => {
+        const account = Array.isArray(route.provider_account)
+          ? route.provider_account[0]
+          : route.provider_account
+        return account?.is_active !== false && account?.provider_id && route.provider_service_id
+      })
+
+      const providerServiceIds = [...new Set(activeRoutes.map((route: any) => route.provider_service_id).filter(Boolean))]
+      if (providerServiceIds.length > 0) {
+        const { data: routedServices } = await supabase
+          .from('services')
+          .select('provider_id, provider_service_id, min_quantity, is_active')
+          .in('provider_service_id', providerServiceIds)
+
+        const minimumByProviderService = new Map<string, number>()
+        for (const routedService of routedServices || []) {
+          if (routedService.is_active === false) continue
+          const minimum = Number(routedService.min_quantity || 0)
+          if (minimum <= 0) continue
+          const key = `${routedService.provider_id}:${routedService.provider_service_id}`
+          const existing = minimumByProviderService.get(key)
+          if (existing === undefined || minimum < existing) {
+            minimumByProviderService.set(key, minimum)
+          }
+        }
+
+        for (const route of activeRoutes as any[]) {
+          const account = Array.isArray(route.provider_account)
+            ? route.provider_account[0]
+            : route.provider_account
+          const minimum = minimumByProviderService.get(`${account.provider_id}:${route.provider_service_id}`)
+          if (minimum === undefined) continue
+          const existing = routeMinimums.get(route.service_id)
+          if (existing === undefined || minimum < existing) {
+            routeMinimums.set(route.service_id, minimum)
+          }
+        }
+      }
+    }
     const { data: ps } = await supabase.from('platform_settings').select('global_markup_percent').limit(1).maybeSingle()
     const markupPct = Number(ps?.global_markup_percent ?? 0)
     const markupMul = 1 + (markupPct / 100)
@@ -347,17 +399,20 @@ serve(async (req) => {
     for (const eng of engagements) {
       const svc = svcMap.get(eng.service_id) as any
       if (!svc || svc.is_active === false) {
-        return new Response(JSON.stringify({ error: `Service unavailable: ${eng.service_id}` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify({ error: `${eng.type || 'Selected service'} is currently unavailable` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       const qty = Math.max(0, Math.floor(Number(eng.quantity) || 0))
       if (qty <= 0) {
         return new Response(JSON.stringify({ error: 'Invalid quantity' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
-      if (svc.min_quantity && qty < svc.min_quantity) {
-        return new Response(JSON.stringify({ error: `Quantity below minimum for ${svc.id}` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      const effectiveMinimum = routeMinimums.get(eng.service_id) ?? Number(svc.min_quantity || 0)
+      if (effectiveMinimum > 0 && qty < effectiveMinimum) {
+        return new Response(JSON.stringify({
+          error: `${eng.type || 'Service'} quantity ${qty} is below provider minimum ${effectiveMinimum}`
+        }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       if (svc.max_quantity && qty > svc.max_quantity) {
-        return new Response(JSON.stringify({ error: `Quantity above maximum for ${svc.id}` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify({ error: `${eng.type || 'Service'} quantity ${qty} is above provider maximum ${svc.max_quantity}` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       // Use admin-set bundle price_per_k when available, else fall back to service price.
       // Global markup is still applied on top for backward compatibility (currently 0).

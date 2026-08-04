@@ -76,7 +76,7 @@ export async function notifyDepositDirect(admin: any, input: DepositNotification
   if (profile?.telegram_chat_id && profile?.telegram_notifications_enabled !== false) {
     results.user = await send(String(profile.telegram_chat_id), [
       success ? '✅ <b>Deposit Successful</b>' : '❌ <b>Deposit Failed</b>',
-      '', ...common.slice(1),
+      '', ...common.slice(2),
       success ? '\nThank you! Aap ab order laga sakte hain. 🚀' : '\nSupport se contact karein agar amount kat gaya hai.',
     ].join('\n'))
   }

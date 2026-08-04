@@ -111,12 +111,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Has a 10-second safety timeout to prevent infinite freeze
     const initializeAuth = async () => {
       try {
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session fetch timed out')), 10000)
-        );
+        // Session fetch: 6s timeout + ek retry — slow network pe bhi login mil jaata hai
+        const getSessionWithTimeout = async (ms: number) =>
+          (await Promise.race([
+            supabase.auth.getSession(),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Session fetch timed out')), ms)
+            ),
+          ])) as any;
 
-        const result = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        let result: any = null;
+        try {
+          result = await getSessionWithTimeout(6000);
+        } catch {
+          result = await getSessionWithTimeout(8000);
+        }
         if (!isMounted) return;
 
         const session = result?.data?.session ?? null;
@@ -124,15 +133,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          // Fetch user data with its own timeout
-          try {
-            await Promise.race([
-              fetchUserData(session.user.id),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Data fetch timed out')), 10000))
-            ]);
-          } catch (e) {
-            console.warn('User data fetch timed out, will retry on next action');
-          }
+          // Profile/wallet/role background me load karo — inke liye UI block nahi hoga
+          void fetchUserData(session.user.id);
         }
       } catch (err) {
         console.warn('initializeAuth timed out or failed:', err);

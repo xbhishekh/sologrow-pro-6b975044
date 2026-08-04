@@ -128,13 +128,14 @@ serve(async (req) => {
       })
     }
 
-    const { data: roleData } = await supabase
+    const { data: roleRows } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .single()
 
-    if (roleData?.role !== 'admin') {
+    const isAdmin = (roleRows || []).some((r: { role: string }) => r.role === 'admin')
+
+    if (!isAdmin) {
       return new Response(JSON.stringify({ error: 'Admin access required' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -147,7 +148,8 @@ serve(async (req) => {
       action = 'fetch', // 'fetch' = get list, 'import' = import specific services
       service_ids = [],  // Array of service IDs to import
       search_query = '',  // Search query for filtering
-      category_override = '' // Override category for auto-import from bundles (e.g., "Instagram Saves")
+      category_override = '', // Override category for auto-import from bundles (e.g., "Instagram Saves")
+      provider_account_id = null // optional: use this specific account's credentials
     } = await req.json()
 
     if (!provider_id) {
@@ -159,112 +161,120 @@ serve(async (req) => {
 
     console.log(`Action: ${action}, Provider: ${provider_id}`)
 
-    // Get provider details - first try providers table, then fall back to provider_accounts
-    let apiKey: string | null = null
-    let apiUrl: string | null = null
+    // Build ALL candidate credentials for this provider (accounts first, then providers row).
+    // Different accounts of the same provider can expose different service catalogs / keys,
+    // so we try each one until the requested service IDs are found.
+    type Cred = { accountId: string | null; name: string; apiKey: string; apiUrl: string }
+    const creds: Cred[] = []
+
+    const { data: accounts } = await supabase
+      .from('provider_accounts')
+      .select('id, name, api_key, api_url, priority, is_active')
+      .eq('provider_id', provider_id)
+      .eq('is_active', true)
+      .order('priority', { ascending: true })
+
+    for (const a of accounts || []) {
+      if (!a.api_key || !a.api_url) continue
+      if (provider_account_id && a.id !== provider_account_id) continue
+      creds.push({ accountId: a.id, name: a.name || provider_id, apiKey: a.api_key, apiUrl: a.api_url })
+    }
 
     const { data: provider } = await supabase
       .from('providers')
       .select('*')
       .eq('id', provider_id)
-      .single()
+      .maybeSingle()
 
-    if (provider) {
-      apiKey = provider.api_key
-      apiUrl = provider.api_url
-    } else {
-      // Fallback: find a provider_account with matching provider_id
-      const { data: account } = await supabase
-        .from('provider_accounts')
-        .select('api_key, api_url, name')
-        .eq('provider_id', provider_id)
-        .eq('is_active', true)
-        .order('priority', { ascending: true })
-        .limit(1)
-        .single()
-
-      if (account) {
-        apiKey = account.api_key
-        apiUrl = account.api_url
-
-        // Auto-create providers entry so services FK constraint is satisfied
-        await supabase
-          .from('providers')
-          .upsert({
-            id: provider_id,
-            name: account.name || provider_id,
-            api_key: account.api_key,
-            api_url: account.api_url,
-            is_active: true,
-          }, { onConflict: 'id' })
-
-        console.log(`Auto-created provider entry for: ${provider_id}`)
-      }
+    if (provider?.api_key && provider?.api_url &&
+        !creds.some(c => c.apiKey === provider.api_key && c.apiUrl === provider.api_url)) {
+      creds.push({ accountId: null, name: provider.name || provider_id, apiKey: provider.api_key, apiUrl: provider.api_url })
     }
 
-    if (!apiKey || !apiUrl) {
+    // Ensure providers row exists so the services FK constraint is satisfied
+    if (!provider && creds[0]) {
+      await supabase
+        .from('providers')
+        .upsert({
+          id: provider_id,
+          name: creds[0].name,
+          api_key: creds[0].apiKey,
+          api_url: creds[0].apiUrl,
+          is_active: true,
+        }, { onConflict: 'id' })
+      console.log(`Auto-created provider entry for: ${provider_id}`)
+    }
+
+    if (creds.length === 0) {
       return new Response(JSON.stringify({ error: `Provider not found: ${provider_id}. Check providers or provider_accounts table.` }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    // Fetch services from provider API
-    const formData = new URLSearchParams()
-    formData.append('key', apiKey)
-    formData.append('action', 'services')
+    // Fetch the service catalog from one credential set
+    async function fetchCatalog(cred: Cred): Promise<{ list: ProviderService[] | null; err: string }> {
+      try {
+        const formData = new URLSearchParams()
+        formData.append('key', cred.apiKey)
+        formData.append('action', 'services')
 
-    console.log(`Fetching from: ${apiUrl}`)
-
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData.toString()
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`API Error: ${errorText}`)
-      return new Response(JSON.stringify({
-        error: `Provider API error: ${response.status}`,
-        details: errorText
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    const rawResponse = await response.json()
-
-    // Handle provider error responses (they return { error: "..." } instead of array)
-    if (!Array.isArray(rawResponse)) {
-      // Check if it's an error response from the provider
-      if (rawResponse?.error) {
-        console.error('Provider returned error:', rawResponse.error)
-        return new Response(JSON.stringify({
-          error: `Provider error: ${rawResponse.error}`,
-          details: rawResponse
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 25000)
+        const response = await fetch(cred.apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: formData.toString(),
+          signal: controller.signal,
         })
-      }
+        clearTimeout(timeout)
 
-      console.error('Invalid API response format:', JSON.stringify(rawResponse).slice(0, 500))
+        if (!response.ok) {
+          return { list: null, err: `${cred.name}: HTTP ${response.status}` }
+        }
+        const raw = await response.json()
+        if (!Array.isArray(raw)) {
+          return { list: null, err: `${cred.name}: ${raw?.error || 'invalid response format'}` }
+        }
+        return { list: raw as ProviderService[], err: '' }
+      } catch (e) {
+        return { list: null, err: `${cred.name}: ${(e as Error).message}` }
+      }
+    }
+
+    const wantedIds: string[] = (service_ids || []).map((x: unknown) => String(x).trim()).filter(Boolean)
+
+    let servicesData: ProviderService[] | null = null
+    let usedCred: Cred = creds[0]
+    const fetchErrors: string[] = []
+
+    for (const cred of creds) {
+      const { list, err } = await fetchCatalog(cred)
+      if (!list) { fetchErrors.push(err); continue }
+      console.log(`Received ${list.length} services from ${cred.name}`)
+      servicesData = list
+      usedCred = cred
+      // For import, keep trying other accounts until the requested IDs exist in the catalog
+      if (action === 'import' && wantedIds.length > 0) {
+        const idSet = new Set(list.map(s => String(s.service)))
+        if (wantedIds.some(id => idSet.has(id))) break
+        fetchErrors.push(`${cred.name}: service ${wantedIds.join(', ')} not in catalog (${list.length} services)`)
+        continue
+      }
+      break
+    }
+
+    if (!servicesData) {
       return new Response(JSON.stringify({
-        error: 'Invalid API response format',
-        received: typeof rawResponse,
-        preview: JSON.stringify(rawResponse).slice(0, 200)
+        error: `Provider API error: ${fetchErrors.join(' | ') || 'no catalog returned'}`
       }), {
-        status: 500,
+        status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    // Cast to proper type after validation
-    const servicesData: ProviderService[] = rawResponse
-
-    console.log(`Received ${servicesData.length} services from API`)
+    const apiKey = usedCred.apiKey
+    const apiUrl = usedCred.apiUrl
 
     // 1. Fetch exchange rates
     let exchangeRates: Record<string, number> = { USD: 1, INR: 90, EUR: 0.92, GBP: 0.79, AED: 3.67 };
@@ -344,13 +354,16 @@ serve(async (req) => {
         })
       }
 
-      // Filter to only selected services
-      const selectedServices = servicesData.filter(s =>
-        service_ids.includes(s.service.toString())
-      )
+      // Filter to only selected services (string-normalised compare)
+      const wanted = new Set(wantedIds)
+      const selectedServices = servicesData.filter(s => wanted.has(String(s.service).trim()))
 
       if (selectedServices.length === 0) {
-        return new Response(JSON.stringify({ error: 'Selected services not found' }), {
+        const sample = servicesData.slice(0, 5).map(s => String(s.service)).join(', ')
+        return new Response(JSON.stringify({
+          error: `Service ID ${wantedIds.join(', ')} not found in ${provider_id} catalog (${servicesData.length} services checked across ${creds.length} account(s)). Example IDs: ${sample}`,
+          details: fetchErrors.length ? fetchErrors : undefined
+        }), {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -383,19 +396,13 @@ serve(async (req) => {
             errors.push(`Update ${service.name}: ${error.message}`)
           } else {
             updated++
-            
-            // Auto-link in mapping table
-            const { data: accounts } = await supabase
-              .from('provider_accounts')
-              .select('id')
-              .eq('provider_id', provider_id)
-              .eq('is_active', true)
-              .limit(1)
-            
-            if (accounts?.[0]) {
+
+            // Auto-link in mapping table (prefer the account whose catalog matched)
+            const linkAccountId = usedCred.accountId || accounts?.[0]?.id
+            if (linkAccountId) {
               await supabase.from('service_provider_mapping').upsert({
                 service_id: existing.id,
-                provider_account_id: accounts[0].id,
+                provider_account_id: linkAccountId,
                 provider_service_id: service.provider_service_id,
                 sort_order: 1,
                 is_active: true
@@ -413,25 +420,17 @@ serve(async (req) => {
             errors.push(`Insert ${service.name}: ${error.message}`)
           } else {
             imported++
-            
-            // Auto-link in mapping table
-            if (inserted) {
-              const { data: accounts } = await supabase
-                .from('provider_accounts')
-                .select('id')
-                .eq('provider_id', provider_id)
-                .eq('is_active', true)
-                .limit(1)
-              
-              if (accounts?.[0]) {
-                await supabase.from('service_provider_mapping').insert({
-                  service_id: inserted.id,
-                  provider_account_id: accounts[0].id,
-                  provider_service_id: service.provider_service_id,
-                  sort_order: 1,
-                  is_active: true
-                })
-              }
+
+            // Auto-link in mapping table (prefer the account whose catalog matched)
+            const linkAccountId = usedCred.accountId || accounts?.[0]?.id
+            if (inserted && linkAccountId) {
+              await supabase.from('service_provider_mapping').upsert({
+                service_id: inserted.id,
+                provider_account_id: linkAccountId,
+                provider_service_id: service.provider_service_id,
+                sort_order: 1,
+                is_active: true
+              }, { onConflict: 'service_id,provider_account_id' })
             }
           }
         }

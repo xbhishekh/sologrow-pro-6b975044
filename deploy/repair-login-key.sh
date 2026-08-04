@@ -78,6 +78,15 @@ done
 [ "$AUTH_CODE" = "200" ] || die "regenerated key still rejected locally (HTTP $AUTH_CODE)"
 ok "backend key regenerated and accepted"
 
+# Password login depends on healthy legacy user/identity rows too. Repair them
+# when the original migration export is available; do not fail fresh installs.
+if [ -s /opt/migration/06_auth_users.json ]; then
+  log "legacy login records repair"
+  SECRETS_FILE="$SECRETS_FILE" OUT=/opt/migration bash "$APP_DIR/deploy/repair-old-user-login.sh"
+else
+  log "legacy auth export not present; skipping old-user row repair"
+fi
+
 mkdir -p "$APP_DIR"
 tmp_env=$(mktemp)
 if [ -f "$APP_DIR/.env" ]; then
@@ -250,6 +259,18 @@ LOCAL_CADDY_HTML=$(curl -kfsS --resolve "$APP_DOMAIN:443:127.0.0.1" \
   -H 'Cache-Control: no-cache' "https://$APP_DOMAIN/?login-repair=$(date +%s)" || true)
 printf '%s' "$LOCAL_CADDY_HTML" | grep -Fq "$EXPECTED_JS" || die "local Caddy is not serving the fresh OrganicSMM build"
 ok "local Caddy serves fresh OrganicSMM bundle"
+
+# Verify the exact public password-login path. Invalid dummy credentials must
+# reach GoTrue and return 400; 401/500/502 means login infrastructure is broken.
+LOGIN_CODE=$(curl -sS -o /tmp/organicsmm-login-probe.json -w '%{http_code}' \
+  -X POST "https://$APP_DOMAIN/auth/v1/token?grant_type=password" \
+  -H "apikey: $STACK_ANON_KEY" -H 'Content-Type: application/json' \
+  --data '{"email":"login-health-probe@invalid.example","password":"not-a-real-password"}' || true)
+[ "$LOGIN_CODE" = "400" ] || die "public password-login route unhealthy (HTTP $LOGIN_CODE)"
+grep -q 'invalid_credentials' /tmp/organicsmm-login-probe.json \
+  || die "public password-login route returned an unexpected response"
+rm -f /tmp/organicsmm-login-probe.json
+ok "public password-login route healthy"
 
 # Public DNS may be proxied/cached or point at another VPS. Report that clearly
 # without falsely claiming that this server or port 3000 failed.

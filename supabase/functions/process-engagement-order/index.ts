@@ -399,7 +399,7 @@ serve(async (req) => {
     for (const eng of engagements) {
       const svc = svcMap.get(eng.service_id) as any
       if (!svc || svc.is_active === false) {
-        return new Response(JSON.stringify({ error: `Service unavailable: ${eng.type || "Service"} (ID: ${eng.service_id})` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify({ error: `${eng.type || 'Selected service'} is currently unavailable` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       const qty = Math.max(0, Math.floor(Number(eng.quantity) || 0))
       if (qty <= 0) {
@@ -412,7 +412,7 @@ serve(async (req) => {
         }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       if (svc.max_quantity && qty > svc.max_quantity) {
-        return new Response(JSON.stringify({ error: `Quantity above maximum for ${eng.type || "Service"} (ID: ${svc.id})` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify({ error: `${eng.type || 'Service'} quantity ${qty} is above provider maximum ${svc.max_quantity}` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       // Use admin-set bundle price_per_k when available, else fall back to service price.
       // Global markup is still applied on top for backward compatibility (currently 0).

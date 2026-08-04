@@ -571,20 +571,19 @@ export default function AdminUsers() {
     return (u.orderCounts?.singleActive || 0) + (u.orderCounts?.engagementActive || 0);
   };
 
-  // Filter users based on tab
-  const getFilteredUsers = () => {
+  // Filter users based on tab — memoized taaki har render pe hazaaron rows dubara filter na ho
+  const filteredUsers = useMemo(() => {
     let filtered = users || [];
 
-    // Search filter
-    if (searchQuery) {
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
       filtered = filtered.filter(
         (u) =>
-          u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          u.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+          u.email.toLowerCase().includes(q) ||
+          u.full_name?.toLowerCase().includes(q)
       );
     }
 
-    // Tab filter
     switch (activeTab) {
       case 'normal':
         return filtered.filter(
@@ -601,15 +600,38 @@ export default function AdminUsers() {
       default:
         return filtered;
     }
-  };
+  }, [users, searchQuery, activeTab]);
 
-  const filteredUsers = getFilteredUsers();
+  // Tab / search badalne par list wapas top se
+  useEffect(() => {
+    setVisibleCount(RENDER_PAGE_SIZE);
+  }, [searchQuery, activeTab]);
 
-  // Stats
-  const totalBalance = users?.reduce((sum, u) => sum + (u.wallet?.balance || 0), 0) || 0;
-  const normalCount = users?.filter((u) => !u.subscription || u.subscription.status !== 'active').length || 0;
-  const monthlyCount = users?.filter((u) => u.subscription?.status === 'active' && u.subscription?.plan_type === 'monthly').length || 0;
-  const lifetimeCount = users?.filter((u) => u.subscription?.status === 'active' && u.subscription?.plan_type === 'lifetime').length || 0;
+  const visibleUsers = useMemo(
+    () => filteredUsers.slice(0, visibleCount),
+    [filteredUsers, visibleCount]
+  );
+
+  // Stats — ek hi pass me, har render pe 4 baar poori list scan nahi
+  const { totalBalance, normalCount, monthlyCount, lifetimeCount } = useMemo(() => {
+    let balance = 0;
+    let normal = 0;
+    let monthly = 0;
+    let lifetime = 0;
+    for (const u of users || []) {
+      balance += u.wallet?.balance || 0;
+      const sub = u.subscription;
+      if (!sub || sub.status !== 'active') normal += 1;
+      else if (sub.plan_type === 'monthly') monthly += 1;
+      else if (sub.plan_type === 'lifetime') lifetime += 1;
+    }
+    return {
+      totalBalance: balance,
+      normalCount: normal,
+      monthlyCount: monthly,
+      lifetimeCount: lifetime,
+    };
+  }, [users]);
 
   // Wait for auth to load before checking admin status
   if (authLoading) {

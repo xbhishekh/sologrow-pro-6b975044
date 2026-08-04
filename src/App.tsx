@@ -77,6 +77,7 @@ const RefundPolicy = lazy(() => import("./pages/legal/RefundPolicy"));
 const CookiePolicy = lazy(() => import("./pages/legal/CookiePolicy"));
 const ContactUs = lazy(() => import("./pages/legal/ContactUs"));
 const AboutUs = lazy(() => import("./pages/legal/AboutUs"));
+const Services = lazy(() => import("./pages/Services"));
 const ShippingPolicy = lazy(() => import("./pages/legal/ShippingPolicy"));
 
 const queryClient = new QueryClient({
@@ -179,6 +180,7 @@ const App = () => {
                     <Route path="/cookies" element={<CookiePolicy />} />
                     <Route path="/contact" element={<ContactUs />} />
                     <Route path="/about" element={<AboutUs />} />
+                    <Route path="/services" element={<Services />} />
                     <Route path="/shipping" element={<ShippingPolicy />} />
                     {/* Never strand visitors on a 404 screen; old/indexed URLs return home. */}
                     <Route path="*" element={<Navigate to="/" replace />} />

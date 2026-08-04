@@ -10,6 +10,7 @@ echo "=== SERVICES ==="
 P "smmpanel (frontend :3000)" "$(systemctl is-active smmpanel)"
 P "caddy"                     "$(systemctl is-active caddy)"
 P "docker containers up"      "$(docker ps --format '{{.Names}}' | wc -l)"
+P "ZapUPI permanent guard"    "$(systemctl is-active organicsmm-payment-guard.timer 2>/dev/null || echo inactive)"
 
 echo "=== HTTP ==="
 P "https://$APP_DOMAIN"               "$(c https://$APP_DOMAIN)"
@@ -33,6 +34,11 @@ echo "=== BUILD ==="
 P "dist/index.html"  "$([ -f "$APP_DIR/dist/index.html" ] && echo present || echo MISSING)"
 P "manualChunks in vite config" "$(grep -v '^\s*//' "$APP_DIR/vite.config.ts" | grep -q manualChunks && echo 'FOUND (hatao! black screen risk)' || echo 'absent (good)')"
 P "VITE_SUPABASE_URL" "$(grep VITE_SUPABASE_URL "$APP_DIR/.env" | cut -d= -f2)"
+if bash "$APP_DIR/deploy/payment-gateway-guard.sh" --check >/dev/null 2>&1; then
+  P "ZapUPI key in Edge Runtime" "loaded + matches secrets"
+else
+  P "ZapUPI key in Edge Runtime" "MISSING/STALE"
+fi
 
 echo
 echo "MANUAL TEST: login (purana password), wallet balance, order place, admin funds add."

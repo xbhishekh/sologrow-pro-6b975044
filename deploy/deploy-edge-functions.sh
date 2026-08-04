@@ -83,7 +83,7 @@ ok "$(wc -l < "$ENVF") env vars"
 if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
   ok "ZapUPI API key configured"
 else
-  log "WARNING: ZapUPI API key is missing in $SECRETS_FILE"
+  die "ZapUPI API key is missing in $SECRETS_FILE — ZAPUPI_ZAP_KEY set kiye bina payment deploy unsafe hai"
 fi
 if [ -n "$OXAPAY_EFFECTIVE_KEY" ]; then
   ok "OxaPay merchant API key configured"
@@ -167,13 +167,13 @@ sleep 5
 FUNCTIONS_CONTAINER_ID="$("${COMPOSE[@]}" ps -q functions)"
 [ -n "$FUNCTIONS_CONTAINER_ID" ] || die "functions container nahi mila"
 key_in_container() {
-  docker exec "$FUNCTIONS_CONTAINER_ID" printenv ZAPUPI_ZAP_KEY 2>/dev/null | grep -q '.' \
-    || docker inspect "$FUNCTIONS_CONTAINER_ID" --format '{{range .Config.Env}}{{println .}}{{end}}' \
-         2>/dev/null | grep -q '^ZAPUPI_ZAP_KEY=.'
+  local running_key
+  running_key="$(docker exec "$FUNCTIONS_CONTAINER_ID" printenv ZAPUPI_ZAP_KEY 2>/dev/null || true)"
+  [ -n "$running_key" ] && [ "$running_key" = "$ZAPUPI_EFFECTIVE_KEY" ]
 }
 if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
   if key_in_container; then
-    ok "ZapUPI API key edge runtime me loaded"
+    ok "ZapUPI API key edge runtime me loaded + exact match"
   else
     die "ZapUPI key functions container me load nahi hui; merged compose config check karo"
   fi
@@ -191,6 +191,34 @@ if docker exec "$FUNCTIONS_CONTAINER_ID" printenv TELEGRAM_BOT_TOKEN 2>/dev/null
 else
   die "Telegram bot token/chat ID functions container me load nahi hua"
 fi
+
+log "permanent payment-gateway guard install"
+cat > /etc/systemd/system/organicsmm-payment-guard.service <<UNIT
+[Unit]
+Description=OrganicSMM ZapUPI payment key guard
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=$APP_DIR
+ExecStart=/usr/bin/bash $APP_DIR/deploy/payment-gateway-guard.sh
+UNIT
+cat > /etc/systemd/system/organicsmm-payment-guard.timer <<'UNIT'
+[Unit]
+Description=Verify OrganicSMM ZapUPI gateway every two minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now organicsmm-payment-guard.timer >/dev/null
+ok "permanent ZapUPI guard enabled (every 2 minutes)"
 
 log "Telegram payment-alert smoke test"
 TG_TOKEN="${TELEGRAM_BOT_TOKEN:-${TELEGRAM_TOKEN:-}}"

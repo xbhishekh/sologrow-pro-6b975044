@@ -65,6 +65,12 @@ setenv ENABLE_EMAIL_AUTOCONFIRM "true"
 setenv DISABLE_SIGNUP    "false"
 setenv ADDITIONAL_REDIRECT_URLS "https://$APP_DOMAIN,https://$APP_DOMAIN/**"
 
+# Payment/provider variables must survive every ordinary stack recreation.
+# Compose reads these values even when deployment is run outside this script.
+ZAPUPI_EFFECTIVE_KEY="${ZAPUPI_ZAP_KEY:-${ZAPUPI_TOKEN:-${ZAPUPI_API_KEY:-${ZAPUPI_KEY:-${ZAPUPI_SECRET:-}}}}}"
+[ -n "$ZAPUPI_EFFECTIVE_KEY" ] || die "ZAPUPI_ZAP_KEY $SECRETS_FILE me missing hai"
+setenv ZAPUPI_ZAP_KEY "$ZAPUPI_EFFECTIVE_KEY"
+
 # CRITICAL: host 5432 conflict -> map Postgres to $POSTGRES_PORT (default 5433)
 log "postgres host port -> $POSTGRES_PORT (5432 conflict avoid)"
 mkdir -p .
@@ -77,7 +83,19 @@ services:
     ports: !override
       - "127.0.0.1:8000:8000/tcp"
       - "127.0.0.1:8443:8443/tcp"
+  # ORGANICSMM_FUNCTIONS_ENV
+  functions:
+    env_file:
+      - ./functions.env
+    environment:
+      ZAPUPI_ZAP_KEY: \${ZAPUPI_ZAP_KEY:-}
 YML
+
+# Edge Runtime gets the same canonical key on first install and on rebuilds.
+touch functions.env
+sed -i '/^ZAPUPI_ZAP_KEY=/d' functions.env
+printf 'ZAPUPI_ZAP_KEY=%s\n' "$ZAPUPI_EFFECTIVE_KEY" >> functions.env
+chmod 600 functions.env
 
 log "docker compose pull + up"
 docker compose pull

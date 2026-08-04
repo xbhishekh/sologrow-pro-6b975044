@@ -87,6 +87,7 @@ const queryClient = new QueryClient({
       gcTime: 15 * 60 * 1000,          // 15 min cache retention
       refetchOnWindowFocus: false,      // Don't refetch on tab switch
       refetchOnReconnect: false,        // Don't refetch on reconnect
+      refetchIntervalInBackground: false, // Tab background me polling band — hang/load kam
       refetchOnMount: false,            // Use cached data on navigation
       retry: 2,
       retryDelay: (i) => Math.min(1000 * 2 ** i, 10000),

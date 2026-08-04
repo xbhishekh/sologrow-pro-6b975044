@@ -30,10 +30,23 @@ export async function notifyDepositDirect(admin: any, input: DepositNotification
 
   const [{ data: profile }, { data: wallet }] = await Promise.all([
     admin.from('profiles')
-      .select('email, telegram_chat_id, telegram_notifications_enabled')
+      .select('email, full_name, telegram_chat_id, telegram_notifications_enabled')
       .eq('user_id', input.userId).maybeSingle(),
     admin.from('wallets').select('balance').eq('user_id', input.userId).maybeSingle(),
   ])
+
+  // Profile row missing / email blank ho to auth se email nikaalo
+  let userEmail: string | null = profile?.email ?? null
+  let userName: string | null = profile?.full_name ?? null
+  if (!userEmail) {
+    try {
+      const { data: authUser } = await admin.auth.admin.getUserById(input.userId)
+      userEmail = authUser?.user?.email ?? null
+      userName = userName ?? (authUser?.user?.user_metadata?.full_name ?? null)
+    } catch (e) {
+      console.error('deposit-notification: auth lookup failed', e)
+    }
+  }
 
   const success = input.status === 'success'
   const amountInr = input.amountInr != null ? `₹${Number(input.amountInr).toFixed(2)}` : '—'
@@ -41,7 +54,8 @@ export async function notifyDepositDirect(admin: any, input: DepositNotification
   const balanceInr = wallet?.balance != null ? `₹${(Number(wallet.balance) * 90).toFixed(2)}` : '—'
   const adminChatId = (Deno.env.get('TELEGRAM_CHAT_ID') || '').trim()
   const common = [
-    `👤 <b>User:</b> ${esc(profile?.email ?? input.userId)}`,
+    `👤 <b>User:</b> ${esc(userEmail ?? 'unknown')}${userName ? ` (${esc(userName)})` : ''}`,
+    `🔑 <b>User ID:</b> <code>${esc(input.userId)}</code>`,
     `💵 <b>Amount:</b> ${esc(amountInr)}${esc(amountUsd)}`,
     success ? `🏦 <b>New Balance:</b> ${esc(balanceInr)}` : '',
     `💳 <b>Method:</b> ${esc(input.method.toUpperCase())}`,

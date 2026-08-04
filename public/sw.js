@@ -1,47 +1,13 @@
-// 💎 Whopautopailot Pro Service Worker (Lite)
-const CACHE_NAME = 'whopautopailot-app-v1';
-const ASSETS_TO_CACHE = [
-    '/',
-    '/index.html',
-    '/manifest.webmanifest',
-    '/favicon.png',
-    '/logo.png'
-];
-
-// Install Event
-self.addEventListener('install', (event) => {
-    event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            console.log('✅ App Shell cached successfully');
-            return cache.addAll(ASSETS_TO_CACHE);
-        })
-    );
-    self.skipWaiting();
-});
-
-// Activate Event
+// Self-destructing service worker.
+// The old cache-everything SW was serving stale/404 HTML. This version
+// unregisters itself and wipes all caches on first load.
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
-    event.waitUntil(
-        caches.keys().then((keys) => {
-            return Promise.all(
-                keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-            );
-        })
-    );
-});
-
-// Fetch Event (Network-first with Cache recovery)
-self.addEventListener('fetch', (event) => {
-    if (event.request.method !== 'GET') return;
-
-    event.respondWith(
-        fetch(event.request)
-            .then((response) => {
-                // Update cache with new content
-                const copy = response.clone();
-                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-                return response;
-            })
-            .catch(() => caches.match(event.request))
-    );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+    await self.registration.unregister();
+    const clientList = await self.clients.matchAll({ type: 'window' });
+    clientList.forEach((client) => client.navigate(client.url));
+  })());
 });

@@ -990,6 +990,22 @@ export default function AdminUsers() {
           </Card>
         )}
 
+        {/* Load more — poori list ek saath render karne se browser freeze hota tha */}
+        {!isLoading && filteredUsers.length > visibleUsers.length && (
+          <div className="flex flex-col items-center gap-2 pt-2">
+            <p className="text-xs text-muted-foreground">
+              Showing {visibleUsers.length} of {filteredUsers.length} users
+            </p>
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => setVisibleCount((c) => c + RENDER_PAGE_SIZE)}
+            >
+              Load more users
+            </Button>
+          </div>
+        )}
+
         {/* Balance Dialog */}
         <Dialog
           open={!!selectedUser}

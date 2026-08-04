@@ -22,9 +22,15 @@ const adminNavItems = [{ icon: Shield, label: 'Admin Panel', path: '/admin' }];
 
 export function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
-  const { isAdmin, signOut, wallet, profile } = useAuth();
+  const { isAdmin, signOut, wallet, profile, user } = useAuth();
   const { currency, setCurrency, formatPrice, currencyInfo } = useCurrency();
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const accountEmail = profile?.email || user?.email || '';
+  const accountName = profile?.full_name
+    || (typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '')
+    || (typeof user?.user_metadata?.name === 'string' ? user.user_metadata.name : '')
+    || accountEmail.split('@')[0]
+    || 'User';
 
   return (
     <div className="h-full w-full overflow-hidden flex flex-col" style={{ background: '#fff', borderRight: '1px solid #f0e8ef' }}>
@@ -43,14 +49,14 @@ export function Sidebar({ onClose }: SidebarProps) {
       </div>
 
       {/* User info */}
-      {profile && (
+      {user && (
         <div className="mx-4 mb-3 flex items-center gap-2.5 px-3 py-2.5 rounded-xl" style={{ background: '#f0fdf4', border: '1px solid #dcfce7' }}>
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: '#16a34a' }}>
-            {profile.full_name?.[0]?.toUpperCase() || 'U'}
+            {accountName[0]?.toUpperCase() || 'U'}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold truncate" style={{ color: '#1a1a2e' }}>{profile.full_name || 'User'}</p>
-            <p className="text-[10px] truncate" style={{ color: '#aaa' }}>{profile.email}</p>
+            <p className="text-[12px] font-semibold truncate" style={{ color: '#1a1a2e' }}>{accountName}</p>
+            <p className="text-[10px] truncate" style={{ color: '#aaa' }}>{accountEmail}</p>
           </div>
         </div>
       )}

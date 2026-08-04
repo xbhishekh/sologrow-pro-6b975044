@@ -396,9 +396,38 @@ serve(async (req) => {
       .order('created_at', { ascending: false })
       .limit(100)
 
-    const duplicateOrder = (existingOpenOrders || []).find((existing: any) =>
+    let duplicateOrder = (existingOpenOrders || []).find((existing: any) =>
       canonicalLink(existing.link) === incomingCanonicalLink
     )
+
+    // Stale-open guard: an order can stay 'processing' even after every run is
+    // terminal (e.g. some runs failed at the very end). If nothing is actually
+    // running any more, finalize it and let the user order this link again.
+    if (duplicateOrder) {
+      const { count: activeRunCount } = await supabase
+        .from('organic_run_schedule')
+        .select('id, engagement_order_item:engagement_order_items!inner(engagement_order_id)', { count: 'exact', head: true })
+        .in('status', ['pending', 'started', 'processing'])
+        .eq('engagement_order_item.engagement_order_id', duplicateOrder.id)
+
+      if (!activeRunCount) {
+        const { data: dupItems } = await supabase
+          .from('engagement_order_items')
+          .select('quantity, delivered_count')
+          .eq('engagement_order_id', duplicateOrder.id)
+        const totalQty = (dupItems || []).reduce((s: number, i: any) => s + Number(i.quantity || 0), 0)
+        const totalDel = (dupItems || []).reduce((s: number, i: any) => s + Number(i.delivered_count || 0), 0)
+        const finalStatus = totalQty > 0 && totalDel >= totalQty * 0.97
+          ? 'completed'
+          : totalDel > 0 ? 'partial' : 'failed'
+        await supabase.from('engagement_orders')
+          .update({ status: finalStatus, completed_at: new Date().toISOString() })
+          .eq('id', duplicateOrder.id)
+          .neq('status', 'cancelled')
+        console.log(`[loss-guard] finalized stale order ${duplicateOrder.order_number} -> ${finalStatus}; allowing new order`)
+        duplicateOrder = undefined
+      }
+    }
 
     if (duplicateOrder) {
       return new Response(JSON.stringify({

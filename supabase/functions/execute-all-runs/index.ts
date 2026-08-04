@@ -859,6 +859,19 @@ async function updateEngagementOrderStatus(supabase: SupabaseClient, engagementO
         ) {
           itemStatus = 'partial'
         }
+
+        // If every run is terminal and delivery is effectively done (>=97%),
+        // treat the item as completed so the link is freed for re-ordering.
+        if (itemStatus === 'partial' && activeCount === 0) {
+          const { data: itemRow } = await supabase
+            .from('engagement_order_items')
+            .select('quantity, delivered_count')
+            .eq('id', itemId)
+            .maybeSingle()
+          const q = Number(itemRow?.quantity || 0)
+          const d = Number(itemRow?.delivered_count || 0)
+          if (q > 0 && d >= q * 0.97) itemStatus = 'completed'
+        }
         await supabase.from('engagement_order_items').update({ status: itemStatus }).eq('id', itemId)
       }
     }
@@ -874,7 +887,7 @@ async function updateEngagementOrderStatus(supabase: SupabaseClient, engagementO
   const effectiveItems = allItems.map((item: any) => {
     const quantity = Number(item.quantity || 0)
     const delivered = Number(item.delivered_count || 0)
-    if (quantity > 0 && delivered >= quantity) return { ...item, effective_status: 'completed' }
+    if (quantity > 0 && delivered >= quantity * 0.97) return { ...item, effective_status: 'completed' }
     return { ...item, effective_status: item.status }
   })
 
@@ -890,6 +903,14 @@ async function updateEngagementOrderStatus(supabase: SupabaseClient, engagementO
   else if (failedItems === totalItems) orderStatus = 'failed'
   else if (activeItems === 0 && completedItems + partialItems + failedItems + cancelledItems === totalItems) orderStatus = completedItems > 0 ? 'partial' : failedItems > 0 ? 'failed' : 'cancelled'
   else if (parentOrder?.status === 'paused') orderStatus = 'paused'
+
+  // Whole-order near-complete: no active items and >=97% of the total ordered
+  // quantity delivered → mark completed so the same link can be ordered again.
+  if (orderStatus === 'partial') {
+    const totalQty = allItems.reduce((s: number, i: any) => s + Number(i.quantity || 0), 0)
+    const totalDel = allItems.reduce((s: number, i: any) => s + Number(i.delivered_count || 0), 0)
+    if (totalQty > 0 && totalDel >= totalQty * 0.97) orderStatus = 'completed'
+  }
 
   await supabase.from('engagement_orders').update({ status: orderStatus }).eq('id', engagementOrderId).neq('status', 'cancelled')
 }

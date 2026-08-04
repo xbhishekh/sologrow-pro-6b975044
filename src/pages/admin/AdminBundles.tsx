@@ -1209,6 +1209,7 @@ function ProviderMappingDialog({
         const { data: importResult, error: importError } = await supabase.functions.invoke('import-services', {
           body: {
             provider_id: acct.provider_id,
+            provider_account_id: acct.id,
             action: 'import',
             service_ids: [data.serviceId.trim()],
             category_override: categoryOverride,
@@ -1314,7 +1315,9 @@ function ProviderMappingDialog({
 
       // Run updates and inserts in parallel
       if (toInsert.length > 0) {
-        await supabase.from('service_provider_mapping').insert(toInsert);
+        await supabase
+          .from('service_provider_mapping')
+          .upsert(toInsert, { onConflict: 'service_id,provider_account_id' });
       }
       await Promise.all(
         toUpdate.map(u =>

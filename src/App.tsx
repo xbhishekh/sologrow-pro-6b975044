@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AdminGuard } from "@/components/admin/AdminGuard";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { CurrencyProvider } from "@/hooks/useCurrency";
 import { ScrollToTop } from "@/components/ScrollToTop";
@@ -16,7 +16,6 @@ import { TelegramJoinPopup } from "@/components/TelegramJoinPopup";
 // Landing + auth stay eager (first paint). Everything else is code-split
 // and prefetched on idle, so navigation still feels instant.
 import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 
 const loadDashboard = () => import("./pages/Dashboard");
@@ -144,7 +143,6 @@ const App = () => {
                   <Routes>
                     {/* User pages */}
                     <Route path="/" element={<Index />} />
-                    <Route path="*" element={<NotFound />} />
                     <Route path="/auth" element={<Auth />} />
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/orders" element={<Orders />} />
@@ -160,11 +158,11 @@ const App = () => {
 
                     {/* Admin — server-verified guard */}
                     <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
-                    <Route path="/admin/services" element={<NotFound />} />
+                    <Route path="/admin/services" element={<Navigate to="/admin" replace />} />
                     <Route path="/admin/users" element={<AdminGuard><AdminUsers /></AdminGuard>} />
                     <Route path="/admin/bundles" element={<AdminGuard><AdminBundles /></AdminGuard>} />
                     <Route path="/admin/cron-monitor" element={<AdminGuard><AdminCronMonitor /></AdminGuard>} />
-                    <Route path="/admin/chat" element={<NotFound />} />
+                    <Route path="/admin/chat" element={<Navigate to="/admin" replace />} />
                     <Route path="/admin/deposits" element={<AdminGuard><AdminDeposits /></AdminGuard>} />
                     <Route path="/admin/provider-accounts" element={<AdminGuard><AdminProviderAccounts /></AdminGuard>} />
                     <Route path="/admin/service-provider-mapping" element={<AdminGuard><AdminServiceProviderMapping /></AdminGuard>} />
@@ -182,6 +180,8 @@ const App = () => {
                     <Route path="/contact" element={<ContactUs />} />
                     <Route path="/about" element={<AboutUs />} />
                     <Route path="/shipping" element={<ShippingPolicy />} />
+                    {/* Never strand visitors on a 404 screen; old/indexed URLs return home. */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                   </Suspense>
                 

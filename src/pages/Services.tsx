@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageMeta } from "@/components/seo/PageMeta";
+import { platformPages } from "@/data/platformPages";
 
 const platforms = [
   { icon: Instagram, name: "Instagram", items: ["Reels Views", "Likes", "Followers", "Story Views", "Saves", "Shares"] },
@@ -34,6 +35,15 @@ const features = [
   { icon: Headphones, title: "24/7 Live Support", text: "Real humans on live chat and Telegram whenever you need help." },
 ];
 
+const faqs = [
+  { question: "What is an SMM panel?", answer: "An SMM panel is a self-serve dashboard where you buy social media engagement — views, likes, followers, comments — for your own posts. OrganicSMM adds organic drip delivery so the growth looks natural instead of bot-like." },
+  { question: "Which platforms does OrganicSMM support?", answer: "Instagram, YouTube, TikTok, Facebook, Twitter/X and Telegram, covering views, likes, followers, comments, shares, saves and story views." },
+  { question: "Do I need to share my password?", answer: "Never. We only need the public link of the post, Reel, video or profile you want to grow." },
+  { question: "How fast do orders start?", answer: "Most orders start within a few minutes. Views always begin first, then likes, comments, shares and saves unlock in sequence." },
+  { question: "What is the minimum deposit?", answer: "You can start from ₹50 via UPI, or top up with crypto. Larger top-ups automatically unlock cheaper bundle rates." },
+  { question: "What happens if an order fails?", answer: "Failed or duplicate orders are detected by our loss guard and the amount is refunded straight back to your wallet." },
+];
+
 export default function Services() {
   return (
     <>
@@ -42,6 +52,7 @@ export default function Services() {
         description="Explore OrganicSMM services: Instagram, YouTube, TikTok, Facebook, X and Telegram organic views, likes, followers and engagement with natural drip delivery."
         canonicalPath="/services"
         breadcrumbs={[{ name: "Home", path: "/" }, { name: "Services", path: "/services" }]}
+        faqItems={faqs}
       />
       <div className="min-h-screen bg-background text-foreground">
         <div className="max-w-6xl mx-auto px-4 py-12">
@@ -112,6 +123,30 @@ export default function Services() {
                   <f.icon className="h-6 w-6 text-orange-500 mb-3" />
                   <h3 className="font-semibold mb-1">{f.title}</h3>
                   <p className="text-sm text-muted-foreground">{f.text}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="mb-14">
+            <h2 className="text-2xl font-semibold mb-6">Popular SMM panels</h2>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {platformPages.map((p) => (
+                <Link key={p.slug} to={`/${p.slug}`} className="rounded-2xl border border-border bg-card p-5 hover:border-orange-500/60 transition-colors">
+                  <h3 className="font-semibold mb-1">{p.platform} SMM Panel</h3>
+                  <p className="text-sm text-muted-foreground line-clamp-3">{p.description}</p>
+                </Link>
+              ))}
+            </div>
+          </section>
+
+          <section className="mb-14">
+            <h2 className="text-2xl font-semibold mb-6">Frequently asked questions</h2>
+            <div className="space-y-4">
+              {faqs.map((f) => (
+                <div key={f.question} className="rounded-2xl border border-border bg-card p-6">
+                  <h3 className="font-semibold mb-2">{f.question}</h3>
+                  <p className="text-sm text-muted-foreground">{f.answer}</p>
                 </div>
               ))}
             </div>

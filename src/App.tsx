@@ -78,6 +78,7 @@ const CookiePolicy = lazy(() => import("./pages/legal/CookiePolicy"));
 const ContactUs = lazy(() => import("./pages/legal/ContactUs"));
 const AboutUs = lazy(() => import("./pages/legal/AboutUs"));
 const Services = lazy(() => import("./pages/Services"));
+const PlatformLanding = lazy(() => import("./pages/landing/PlatformLanding"));
 const ShippingPolicy = lazy(() => import("./pages/legal/ShippingPolicy"));
 
 const queryClient = new QueryClient({
@@ -181,6 +182,10 @@ const App = () => {
                     <Route path="/contact" element={<ContactUs />} />
                     <Route path="/about" element={<AboutUs />} />
                     <Route path="/services" element={<Services />} />
+                    <Route path="/instagram-smm-panel" element={<PlatformLanding />} />
+                    <Route path="/youtube-smm-panel" element={<PlatformLanding />} />
+                    <Route path="/tiktok-smm-panel" element={<PlatformLanding />} />
+                    <Route path="/cheap-smm-panel" element={<PlatformLanding />} />
                     <Route path="/shipping" element={<ShippingPolicy />} />
                     {/* Never strand visitors on a 404 screen; old/indexed URLs return home. */}
                     <Route path="*" element={<Navigate to="/" replace />} />

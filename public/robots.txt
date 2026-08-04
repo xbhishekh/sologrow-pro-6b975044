@@ -6,6 +6,12 @@
 User-agent: *
 Allow: /
 Allow: /services
+Allow: /instagram-smm-panel
+Allow: /youtube-smm-panel
+Allow: /tiktok-smm-panel
+Allow: /cheap-smm-panel
+Allow: /about
+Allow: /contact
 Allow: /auth
 Allow: /terms
 Allow: /privacy

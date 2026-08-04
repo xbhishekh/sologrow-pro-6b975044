@@ -36,7 +36,7 @@ export default function AdminAuditLog() {
       if (error) throw error;
       return (data ?? []) as unknown as AuditRow[];
     },
-    refetchInterval: 10000,
+    refetchInterval: 30000,
   });
 
   const filtered = (data ?? []).filter((r) => {

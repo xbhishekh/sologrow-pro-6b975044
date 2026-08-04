@@ -50,8 +50,8 @@ export default function Admin() {
       if (error) throw error;
       return data as any;
     },
-    refetchInterval: 15000,
-    refetchOnWindowFocus: true,
+    refetchInterval: 60000,
+    refetchOnWindowFocus: false,
   });
 
   // RPC ne valid data diya? Tab heavy fallback bilkul mat chalao.

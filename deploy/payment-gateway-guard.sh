@@ -8,8 +8,11 @@ EXPECTED_KEY="${ZAPUPI_ZAP_KEY:-${ZAPUPI_TOKEN:-${ZAPUPI_API_KEY:-${ZAPUPI_KEY:-
 [ -n "$EXPECTED_KEY" ] || die "ZapUPI API key $SECRETS_FILE me missing hai (ZAPUPI_ZAP_KEY=...)"
 
 find_functions_container() {
-  docker ps --format '{{.ID}} {{.Image}} {{.Names}}' \
-    | awk 'tolower($0) ~ /edge-runtime|functions/ { print $1; exit }'
+  # Image/name matching could select an old or unrelated container when more
+  # than one project exists on the VPS. Compose's service label is exact.
+  docker ps \
+    --filter 'label=com.docker.compose.service=functions' \
+    --format '{{.ID}}' | head -n 1
 }
 
 CONTAINER_ID="$(find_functions_container)"

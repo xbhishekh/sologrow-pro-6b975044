@@ -113,6 +113,33 @@ if [ -n "$OXAPAY_EFFECTIVE_KEY" ]; then
   sed -i '/^OXAPAY_MERCHANT_API_KEY=/d' .env
   printf 'OXAPAY_MERCHANT_API_KEY=%s\n' "$OXAPAY_EFFECTIVE_KEY" >> .env
 fi
+# Keep the env attachment in the installation's normal override too. Without
+# this, a later plain `docker compose up -d` recreates Edge Runtime without the
+# payment key and payments fail until the repair timer runs.
+python3 - "$OVERRIDE_COMPOSE" <<'PY'
+from pathlib import Path
+import sys
+
+p = Path(sys.argv[1])
+s = p.read_text() if p.exists() else "services:\n"
+marker = "  # ORGANICSMM_FUNCTIONS_ENV"
+block = """  # ORGANICSMM_FUNCTIONS_ENV
+  functions:
+    env_file:
+      - ./functions.env
+    environment:
+      ZAPUPI_ZAP_KEY: ${ZAPUPI_ZAP_KEY:-}
+      OXAPAY_MERCHANT_API_KEY: ${OXAPAY_MERCHANT_API_KEY:-}
+"""
+if marker in s:
+    start = s.index(marker)
+    s = s[:start].rstrip() + "\n" + block
+else:
+    if not s.rstrip().endswith("services:") and not s.endswith("\n"):
+        s += "\n"
+    s += block
+p.write_text(s)
+PY
 # Never rewrite the installation's own override file — a partial rewrite can
 # drop other services and break the merged config. Instead write a small,
 # self-contained overlay that only patches the `functions` service.

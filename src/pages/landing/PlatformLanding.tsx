@@ -1,4 +1,4 @@
-import { Link, useParams, Navigate } from "react-router-dom";
+import { Link, useLocation, Navigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, ShieldCheck, Zap, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageMeta } from "@/components/seo/PageMeta";
@@ -7,8 +7,9 @@ import { platformBySlug, platformPages } from "@/data/platformPages";
 const SERVICE_SCHEMA_ID = "platform-service-jsonld";
 
 export default function PlatformLanding() {
-  const { slug } = useParams();
-  const page = slug ? platformBySlug[slug] : undefined;
+  const { pathname } = useLocation();
+  const slug = pathname.replace(/^\/+|\/+$/g, "");
+  const page = platformBySlug[slug];
 
   if (!page) return <Navigate to="/services" replace />;
 

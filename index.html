@@ -227,9 +227,14 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(reg => console.log('OrganicSMM: Service Worker Registered'))
-          .catch(err => console.log('SW Registration failed:', err));
+        // Kill any previously registered service worker + its stale caches.
+        // The old SW cached HTML responses (including 404s) and broke the site.
+        navigator.serviceWorker.getRegistrations()
+          .then(regs => Promise.all(regs.map(r => r.unregister())))
+          .catch(() => {});
+        if (window.caches) {
+          caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {});
+        }
       });
     }
   </script>

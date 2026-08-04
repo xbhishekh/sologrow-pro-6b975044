@@ -7,6 +7,15 @@ FN_SRC="$APP_DIR/supabase/functions"
 FN_DST="$SUPABASE_DIR/docker/volumes/functions"
 [ -d "$FN_SRC" ] || die "$FN_SRC nahi mila"
 
+# Never deploy functions with stale exported keys. Check-only avoids rebuilding
+# during a normal deployment; if mismatched, the repair script synchronizes the
+# stack, secrets, frontend, and running services before deployment continues.
+if ! bash "$APP_DIR/deploy/auth-key-guard.sh" --check; then
+  log "auth keys mismatch; permanent repair running before function deploy"
+  bash "$APP_DIR/deploy/repair-login-key.sh"
+  load_secrets
+fi
+
 # Keep the DB-side rotation reservation in sync with the scheduler. Earlier
 # deploys copied only edge-function code, so a VPS could run new scheduler code
 # without the atomic unique lock and send duplicate orders to one provider.

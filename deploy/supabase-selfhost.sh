@@ -16,7 +16,20 @@ fi
 cd "$SUPABASE_DIR/docker"
 
 # ---- JWT keys: generate ANON/SERVICE_ROLE automatically from JWT_SECRET ----
-if [ -z "${ANON_KEY:-}" ] || [ -z "${SERVICE_ROLE_KEY:-}" ]; then
+# Never silently reuse keys that were signed by a different JWT secret.
+KEYS_MATCH_JWT=0
+if [ -n "${ANON_KEY:-}" ] && [ -n "${SERVICE_ROLE_KEY:-}" ]; then
+  if JWT_SECRET_TO_CHECK="$JWT_SECRET" ANON_TO_CHECK="$ANON_KEY" SERVICE_TO_CHECK="$SERVICE_ROLE_KEY" node -e '
+    const c=require("crypto");
+    const valid=(token,role)=>{const p=token.split("."); if(p.length!==3)return false;
+      const s=c.createHmac("sha256",process.env.JWT_SECRET_TO_CHECK).update(p[0]+"."+p[1]).digest("base64url");
+      const a=Buffer.from(s),b=Buffer.from(p[2]); if(a.length!==b.length||!c.timingSafeEqual(a,b))return false;
+      return JSON.parse(Buffer.from(p[1],"base64url").toString()).role===role;};
+    if(!valid(process.env.ANON_TO_CHECK,"anon")||!valid(process.env.SERVICE_TO_CHECK,"service_role"))process.exit(1);' >/dev/null 2>&1; then
+    KEYS_MATCH_JWT=1
+  fi
+fi
+if [ "$KEYS_MATCH_JWT" != "1" ]; then
   log "ANON_KEY / SERVICE_ROLE_KEY generate kar raha hoon"
   KEYS_JSON=$(JWT_SECRET="$JWT_SECRET" node -e '
     const c=require("crypto");

@@ -251,6 +251,38 @@ fi
 systemctl reload caddy
 ok "OrganicSMM Caddy route pinned to ports 3000/8000; other sites preserved"
 
+# Install a lightweight recurring guard. It only performs the expensive repair
+# when stack secrets, running auth, and the frontend bundle stop matching.
+if [ "${AUTH_GUARD_INSTALL:-1}" = "1" ]; then
+  chmod 750 "$APP_DIR/deploy/auth-key-guard.sh"
+  cat > /etc/systemd/system/organicsmm-auth-key-guard.service <<UNIT
+[Unit]
+Description=OrganicSMM auth key consistency guard
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=$APP_DIR
+ExecStart=/usr/bin/env bash $APP_DIR/deploy/auth-key-guard.sh
+UNIT
+  cat > /etc/systemd/system/organicsmm-auth-key-guard.timer <<'UNIT'
+[Unit]
+Description=Check OrganicSMM auth keys every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+RandomizedDelaySec=20
+
+[Install]
+WantedBy=timers.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable --now organicsmm-auth-key-guard.timer >/dev/null
+  ok "permanent auth-key guard enabled (every 5 minutes)"
+fi
+
 # Verify this VPS directly, bypassing public DNS/CDN. Comparing the asset name
 # is more reliable than grepping one guessed public script.
 EXPECTED_JS=$(grep -oE 'src="[^"]+\.js[^"]*"' "$APP_DIR/dist/index.html" | tail -n 1 | cut -d'"' -f2)

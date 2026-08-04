@@ -167,13 +167,13 @@ sleep 5
 FUNCTIONS_CONTAINER_ID="$("${COMPOSE[@]}" ps -q functions)"
 [ -n "$FUNCTIONS_CONTAINER_ID" ] || die "functions container nahi mila"
 key_in_container() {
-  docker exec "$FUNCTIONS_CONTAINER_ID" printenv ZAPUPI_ZAP_KEY 2>/dev/null | grep -q '.' \
-    || docker inspect "$FUNCTIONS_CONTAINER_ID" --format '{{range .Config.Env}}{{println .}}{{end}}' \
-         2>/dev/null | grep -q '^ZAPUPI_ZAP_KEY=.'
+  local running_key
+  running_key="$(docker exec "$FUNCTIONS_CONTAINER_ID" printenv ZAPUPI_ZAP_KEY 2>/dev/null || true)"
+  [ -n "$running_key" ] && [ "$running_key" = "$ZAPUPI_EFFECTIVE_KEY" ]
 }
 if [ -n "$ZAPUPI_EFFECTIVE_KEY" ]; then
   if key_in_container; then
-    ok "ZapUPI API key edge runtime me loaded"
+    ok "ZapUPI API key edge runtime me loaded + exact match"
   else
     die "ZapUPI key functions container me load nahi hui; merged compose config check karo"
   fi

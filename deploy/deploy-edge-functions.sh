@@ -172,8 +172,12 @@ pick_compose() {
   for c in "${candidates[@]}"; do
     local -a args=()
     IFS='|' read -r -a args <<< "$c"
-    if docker compose "${args[@]}" config --services 2>/tmp/smm-compose-config.err \
-         | grep -qx 'functions'; then
+    # NOTE: no pipe here on purpose. `cmd | grep -q` makes grep exit early and
+    # kills docker compose with SIGPIPE, which under `set -o pipefail` marks the
+    # whole check as failed even when the `functions` service exists.
+    local svc_out=""
+    svc_out="$(docker compose "${args[@]}" config --services 2>/tmp/smm-compose-config.err || true)"
+    if printf '%s\n' "$svc_out" | tr -d '\r' | grep -qx 'functions'; then
       COMPOSE=(docker compose "${args[@]}")
       return 0
     fi

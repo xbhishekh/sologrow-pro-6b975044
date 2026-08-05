@@ -177,7 +177,8 @@ pick_compose() {
     # whole check as failed even when the `functions` service exists.
     local svc_out=""
     svc_out="$(docker compose "${args[@]}" config --services 2>/tmp/smm-compose-config.err || true)"
-    if printf '%s\n' "$svc_out" | tr -d '\r' | grep -qx 'functions'; then
+    svc_out="${svc_out//$'\r'/}"
+    if [[ $'\n'"$svc_out"$'\n' == *$'\nfunctions\n'* ]]; then
       COMPOSE=(docker compose "${args[@]}")
       return 0
     fi

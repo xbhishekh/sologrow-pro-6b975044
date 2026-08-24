@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
     // so the user gets redirected without waiting for an extra DB round-trip.
     const persist = admin.from('zapupi_deposits').update({
       payment_url: paymentUrl,
-      gateway_response: gwData,
+      gateway_response: { ...gwData, return_url: returnBaseUrl.toString() },
     }).eq('order_id', orderId).then(() => {}, () => {})
     // @ts-ignore — EdgeRuntime is provided by Supabase Deno runtime
     if (typeof EdgeRuntime !== 'undefined' && (EdgeRuntime as any).waitUntil) {
@@ -145,9 +145,8 @@ function safeReturnUrl(value: unknown, origin: string) {
 
 function gatewayReturnUrl(returnUrl: URL, status: 'success' | 'failed' | 'timeout', orderId: string) {
   const url = new URL(`${publicFunctionsBase(returnUrl)}/functions/v1/zapupi-return`)
-  url.searchParams.set('status', status)
-  url.searchParams.set('deposit_order_id', orderId)
-  url.searchParams.set('return_url', returnUrl.toString())
+  url.searchParams.set('s', status)
+  url.searchParams.set('o', orderId)
   return url.toString()
 }
 

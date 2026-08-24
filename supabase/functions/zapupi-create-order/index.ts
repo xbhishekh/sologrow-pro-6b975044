@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
       order_id: orderId,
       amount_inr: amountInr,
       status: 'pending',
+      gateway_response: { return_url: returnBaseUrl.toString() },
     })
     if (insErr) return json({ error: 'Failed to create deposit row', detail: insErr.message }, 500)
 

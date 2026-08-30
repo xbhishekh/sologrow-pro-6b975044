@@ -56,8 +56,8 @@ const Index = () => {
   return (
     <div className="min-h-screen w-full overflow-x-hidden" style={{ background: C.bg, color: C.ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <PageMeta
-        title="OrganicSMM — Organic Social Media Growth Platform"
-        description="Revolutionary organic social media growth with natural delivery patterns. 100% safe for your accounts."
+        title="Engagement Automation Platform — Views, Likes & Comments on Autopilot"
+        description="OrganicSMM automates full engagement campaigns from one link — views gate first, then likes, comments, shares, reposts and saves, drip-fed with provider rotation and auto refunds."
         canonicalPath="/"
         breadcrumbs={[{ name: 'Home', path: '/' }]}
       />
@@ -477,6 +477,9 @@ const Index = () => {
               <div className="space-y-2.5">
                 {[
                   { to: '/services', label: 'All Services' },
+                  { to: '/instagram-engagement-automation', label: 'Instagram Engagement Automation' },
+                  { to: '/social-media-engagement-automation', label: 'Engagement Automation Platform' },
+                  { to: '/auto-engagement-panel', label: 'Auto Engagement Panel' },
                   { to: '/instagram-smm-panel', label: 'Instagram SMM Panel' },
                   { to: '/youtube-smm-panel', label: 'YouTube SMM Panel' },
                   { to: '/tiktok-smm-panel', label: 'TikTok SMM Panel' },

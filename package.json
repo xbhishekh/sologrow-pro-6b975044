@@ -101,5 +101,11 @@
   "resolutions": {
     "form-data": "^4.0.4",
     "lodash": "^4.17.21"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@swc/core",
+      "esbuild"
+    ]
   }
 }

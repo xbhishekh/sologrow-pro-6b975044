@@ -34,7 +34,7 @@ import {
   curveToSchedule,
   calculateQuantitiesFromCurve,
 } from "@/lib/curve-to-schedule";
-import { Loader2, Rocket, Link as LinkIcon, Wallet, RefreshCw, Brain, Percent, HelpCircle, ArrowDown, Sparkles, Clock, Shuffle, Shield, TrendingUp, Eye, Heart, MessageCircle, Bookmark, Share2 } from "lucide-react";
+import { Loader2, Rocket, Link as LinkIcon, Wallet, RefreshCw, Brain, HelpCircle, ArrowDown, Sparkles, Clock, Shuffle, Shield, TrendingUp, Eye, Heart, MessageCircle, Bookmark, Share2 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -108,7 +108,7 @@ export default function EngagementOrder() {
 
   // Local settings toggles (defaulted from localStorage)
   const [isOrganicMode, setIsOrganicMode] = useState(true);
-  const [isAutoRatios, setIsAutoRatios] = useState(true);
+  const [isAutoRatios] = useState(true);
   // User-saved custom ratios from Settings page (stored in localStorage)
   const [userSavedRatios, setUserSavedRatios] = useState<Record<string, number> | null>(null);
 
@@ -772,95 +772,46 @@ export default function EngagementOrder() {
           <div className="absolute bottom-0 left-0 w-24 sm:w-36 h-24 sm:h-36 bg-gradient-to-tr from-white/10 to-transparent rounded-full blur-3xl" />
         </div>
 
-        {/* AI Automation Toggles */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-6">
-          <Card className={cn(
-            "glass-card border-2 transition-all duration-300 relative overflow-hidden",
-            isOrganicMode ? "border-success/40 bg-success/5 shadow-[0_0_30px_rgba(34,197,94,0.1)]" : "border-border"
-          )}>
-            <CardContent className="p-2.5 sm:p-4 flex items-center justify-between gap-2 sm:gap-3">
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                <div className={cn(
-                  "w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-inner shrink-0",
-                  isOrganicMode ? "bg-success text-white" : "bg-secondary text-muted-foreground"
-                )}>
-                  <Brain className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+{/* AI Automation Toggle */}
+        <Card className={cn(
+          "glass-card border-2 transition-all duration-300 relative overflow-hidden",
+          isOrganicMode ? "border-success/40 bg-success/5 shadow-[0_0_30px_rgba(34,197,94,0.1)]" : "border-border"
+        )}>
+          <CardContent className="p-2.5 sm:p-4 flex items-center justify-between gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className={cn(
+                "w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-inner shrink-0",
+                isOrganicMode ? "bg-success text-white" : "bg-secondary text-muted-foreground"
+              )}>
+                <Brain className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                  <h3 className="text-[13px] sm:text-sm font-black text-foreground tracking-tight">AI Organic Algorithm</h3>
+                  <Badge variant="outline" className={cn(
+                    "text-[8px] sm:text-[9px] font-black uppercase tracking-wider border-none px-1.5 py-0 whitespace-nowrap",
+                    isOrganicMode ? "bg-success text-white" : "bg-muted text-muted-foreground"
+                  )}>
+                    {isOrganicMode ? "ON" : "OFF"}
+                  </Badge>
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                    <h3 className="text-[13px] sm:text-sm font-black text-foreground tracking-tight">AI Organic Algorithm</h3>
-                    <Badge variant="outline" className={cn(
-                      "text-[8px] sm:text-[9px] font-black uppercase tracking-wider border-none px-1.5 py-0 whitespace-nowrap",
-                      isOrganicMode ? "bg-success text-white" : "bg-muted text-muted-foreground"
-                    )}>
-                      {isOrganicMode ? "ON" : "OFF"}
-                    </Badge>
-                  </div>
-                  <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium mb-1.5">AI generates UNIQUE organic patterns for each order automatically</p>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="outline" className="bg-success/10 text-[8px] sm:text-[9px] text-success border-success/20 font-bold py-0 px-1.5">✓ Unique S-curve</Badge>
-                    <Badge variant="outline" className="bg-success/10 text-[8px] sm:text-[9px] text-success border-success/20 font-bold py-0 px-1.5">✓ Random variance</Badge>
-                    <Badge variant="outline" className="bg-success/10 text-[8px] sm:text-[9px] text-success border-success/20 font-bold py-0 px-1.5">✓ Anti-bot</Badge>
-                  </div>
+                <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium mb-1.5">AI generates UNIQUE organic patterns for each order automatically</p>
+                <div className="flex flex-wrap gap-1">
+                  <Badge variant="outline" className="bg-success/10 text-[8px] sm:text-[9px] text-success border-success/20 font-bold py-0 px-1.5">✓ Unique S-curve</Badge>
+                  <Badge variant="outline" className="bg-success/10 text-[8px] sm:text-[9px] text-success border-success/20 font-bold py-0 px-1.5">✓ Random variance</Badge>
+                  <Badge variant="outline" className="bg-success/10 text-[8px] sm:text-[9px] text-success border-success/20 font-bold py-0 px-1.5">✓ Anti-bot</Badge>
                 </div>
               </div>
-              <div className="flex flex-col items-center gap-2 shrink-0 scale-90 sm:scale-100">
-                <Switch
-                  checked={isOrganicMode}
-                  onCheckedChange={(val) => {
-                    setIsOrganicMode(val);
-                    if (val) setIsAutoRatios(false); // turn off the other
-                  }}
-                  className="data-[state=checked]:bg-success"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className={cn(
-            "glass-card border-2 transition-all duration-300 relative overflow-hidden",
-            isAutoRatios ? "border-primary/40 bg-primary/5 shadow-[0_0_30px_rgba(155,135,245,0.1)]" : "border-border"
-          )}>
-            <CardContent className="p-2.5 sm:p-4 flex items-center justify-between gap-2 sm:gap-3">
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                <div className={cn(
-                  "w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center transition-all shadow-inner shrink-0",
-                  isAutoRatios ? "bg-primary text-white" : "bg-secondary text-muted-foreground"
-                )}>
-                  <Percent className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                    <h3 className="text-[13px] sm:text-sm font-black text-foreground tracking-tight">AI Smart Ratios</h3>
-                    <Badge variant="outline" className={cn(
-                      "text-[8px] sm:text-[9px] font-black uppercase tracking-wider border-none px-1.5 py-0 whitespace-nowrap",
-                      isAutoRatios ? "bg-primary text-white" : "bg-muted text-muted-foreground"
-                    )}>
-                      {isAutoRatios ? "AUTO" : "MANUAL"}
-                    </Badge>
-                  </div>
-                  <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium mb-1.5">AI automatically calculates organic engagement ratios</p>
-                  <div className="flex flex-wrap gap-1">
-                    {isAutoRatios ? (
-                      <Badge variant="outline" className="bg-primary/10 text-[8px] sm:text-[9px] text-primary border-primary/20 font-bold py-0 px-1.5 italic">Optimized for algorithms</Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-amber-500/10 text-[8px] sm:text-[9px] text-amber-500 border-amber-500/20 font-bold py-0 px-1.5">Customized by User</Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col items-center gap-2 shrink-0 scale-90 sm:scale-100">
-                <Switch
-                  checked={isAutoRatios}
-                  onCheckedChange={(val) => {
-                    setIsAutoRatios(val);
-                    if (val) setIsOrganicMode(false); // turn off the other
-                  }}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </div>{/* end AI Automation Toggles grid */}
+            </div>
+            <div className="flex flex-col items-center gap-2 shrink-0 scale-90 sm:scale-100">
+              <Switch
+                checked={isOrganicMode}
+                onCheckedChange={setIsOrganicMode}
+                className="data-[state=checked]:bg-success"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Platform Selector */}
         <Card className="glass-card border-2 border-border">

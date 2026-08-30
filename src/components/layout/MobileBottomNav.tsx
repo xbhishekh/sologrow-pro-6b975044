@@ -6,10 +6,10 @@ import logo from '@/assets/logo.jpg';
 
 
 const bottomNavItems = [
-  { icon: Rocket, label: 'Full Engagement', path: '/engagement-order' },
-  { icon: ListOrdered, label: 'Orders', path: '/engagement-orders' },
-  { icon: Wallet, label: 'Wallet', path: '/wallet' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
+  { icon: Rocket, label: 'Full Engagement', path: '/engagement-order', color: 'hsl(160 84% 38%)', inactiveColor: 'hsl(160 32% 64%)' },
+  { icon: ListOrdered, label: 'Orders', path: '/engagement-orders', color: 'hsl(217 91% 50%)', inactiveColor: 'hsl(217 40% 64%)' },
+  { icon: Wallet, label: 'Wallet', path: '/wallet', color: 'hsl(38 92% 45%)', inactiveColor: 'hsl(38 50% 64%)' },
+  { icon: Settings, label: 'Settings', path: '/settings', color: 'hsl(262 83% 52%)', inactiveColor: 'hsl(262 40% 64%)' },
 ];
 
 export function MobileBottomNav() {
@@ -38,11 +38,11 @@ export function MobileBottomNav() {
             const isActive = pathname === item.path || pathname.startsWith(item.path + '/');
             return (
               <Link key={item.path} to={item.path} className="relative flex flex-col items-center gap-1 py-2.5">
-                {isActive && (
-                  <span className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-[3px] rounded-full" style={{ background: 'linear-gradient(90deg, hsl(160 84% 39%), hsl(155 80% 32%))' }} />
+{isActive && (
+                  <span className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-[3px] rounded-full" style={{ background: `linear-gradient(90deg, ${item.color}, color-mix(in srgb, ${item.color} 65%, #000))` }} />
                 )}
-                <item.icon className="w-[20px] h-[20px] transition-colors" strokeWidth={isActive ? 2.4 : 2} style={{ color: isActive ? 'hsl(160 84% 32%)' : '#64748b' }} />
-                <span className="text-[10px] leading-none transition-colors" style={{ color: isActive ? 'hsl(160 84% 28%)' : '#64748b', fontWeight: isActive ? 800 : 600 }}>{item.label}</span>
+                <item.icon className="w-[20px] h-[20px] transition-colors" strokeWidth={isActive ? 2.4 : 2} style={{ color: isActive ? item.color : item.inactiveColor }} />
+                <span className="text-[10px] leading-none transition-colors" style={{ color: isActive ? item.color : '#7c8595', fontWeight: isActive ? 800 : 600 }}>{item.label}</span>
               </Link>
             );
           })}

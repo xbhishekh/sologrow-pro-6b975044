@@ -191,7 +191,9 @@ const App = () => {
                     {/* Never strand visitors on a 404 screen; old/indexed URLs return home. */}
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
+                  </MaintenanceGate>
                   </Suspense>
+
                 
               </BrowserRouter>
             </AppErrorBoundary>

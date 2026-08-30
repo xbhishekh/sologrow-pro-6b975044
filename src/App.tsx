@@ -11,6 +11,7 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { toast } from "sonner";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 import { TelegramJoinPopup } from "@/components/TelegramJoinPopup";
+import { MaintenanceGate } from "@/components/MaintenanceGate";
 
 
 // Landing + auth stay eager (first paint). Everything else is code-split
@@ -142,6 +143,7 @@ const App = () => {
                 <ScrollToTop />
                 <TelegramJoinPopup />
                   <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</div>}>
+                  <MaintenanceGate>
                   <Routes>
                     {/* User pages */}
                     <Route path="/" element={<Index />} />
@@ -190,7 +192,9 @@ const App = () => {
                     {/* Never strand visitors on a 404 screen; old/indexed URLs return home. */}
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
+                  </MaintenanceGate>
                   </Suspense>
+
                 
               </BrowserRouter>
             </AppErrorBoundary>

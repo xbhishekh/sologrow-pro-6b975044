@@ -9,6 +9,21 @@ OrganicSMM is a wallet-based SMM platform with engagement bundles, multi-provide
 - [Home](/): Product overview, features and pricing highlights.
 - [Services](/services): Browse Instagram, YouTube, TikTok and Twitter/X services with prices and speeds.
 - [Sign in / Sign up](/auth): Create a free account or log in.
+- [Instagram SMM Panel](/instagram-smm-panel): Organic Reels views, likes, followers and story views.
+- [YouTube SMM Panel](/youtube-smm-panel): Views, Shorts views, subscribers and watch time.
+- [TikTok SMM Panel](/tiktok-smm-panel): Views, likes, followers, shares and saves.
+- [Facebook SMM Panel](/facebook-smm-panel): Page likes, followers and Reels views.
+- [Telegram SMM Panel](/telegram-smm-panel): Channel members, post views and reactions.
+- [Best SMM Panel India](/best-smm-panel-india): Why OrganicSMM ranks for Indian creators, UPI payments.
+- [Cheapest SMM Panel](/cheap-smm-panel): Wallet bundle tiers and discounted rates.
+- [SMM Panel for Resellers](/smm-panel-for-resellers): Reseller API and wholesale pricing.
+
+## Guides
+
+- [How to grow followers on Instagram organically](/blog/organic-instagram-growth): 2026 guide to Reels retention and views-first engagement.
+
+## Support
+
 - [Support & FAQ](/support): Frequently asked questions about delivery, payments, refunds and Organic Mode.
 
 ## Legal

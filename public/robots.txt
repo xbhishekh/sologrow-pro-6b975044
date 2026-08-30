@@ -10,6 +10,11 @@ Allow: /instagram-smm-panel
 Allow: /youtube-smm-panel
 Allow: /tiktok-smm-panel
 Allow: /cheap-smm-panel
+Allow: /facebook-smm-panel
+Allow: /telegram-smm-panel
+Allow: /best-smm-panel-india
+Allow: /smm-panel-for-resellers
+Allow: /blog/organic-instagram-growth
 Allow: /about
 Allow: /contact
 Allow: /auth

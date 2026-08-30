@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 import { TelegramJoinPopup } from "@/components/TelegramJoinPopup";
 import { MaintenanceGate } from "@/components/MaintenanceGate";
+import { platformPages } from "@/data/platformPages";
+
 
 
 // Landing + auth stay eager (first paint). Everything else is code-split
@@ -81,6 +83,9 @@ const AboutUs = lazy(() => import("./pages/legal/AboutUs"));
 const Services = lazy(() => import("./pages/Services"));
 const PlatformLanding = lazy(() => import("./pages/landing/PlatformLanding"));
 const ShippingPolicy = lazy(() => import("./pages/legal/ShippingPolicy"));
+const OrganicInstagramGrowth = lazy(() => import("./pages/blog/OrganicInstagramGrowth"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -184,14 +189,15 @@ const App = () => {
                     <Route path="/contact" element={<ContactUs />} />
                     <Route path="/about" element={<AboutUs />} />
                     <Route path="/services" element={<Services />} />
-                    <Route path="/instagram-smm-panel" element={<PlatformLanding />} />
-                    <Route path="/youtube-smm-panel" element={<PlatformLanding />} />
-                    <Route path="/tiktok-smm-panel" element={<PlatformLanding />} />
-                    <Route path="/cheap-smm-panel" element={<PlatformLanding />} />
+                    {platformPages.map((p) => (
+                      <Route key={p.slug} path={`/${p.slug}`} element={<PlatformLanding />} />
+                    ))}
+                    <Route path="/blog/organic-instagram-growth" element={<OrganicInstagramGrowth />} />
                     <Route path="/shipping" element={<ShippingPolicy />} />
-                    {/* Never strand visitors on a 404 screen; old/indexed URLs return home. */}
-                    <Route path="*" element={<Navigate to="/" replace />} />
+                    {/* Real 404 (noindex) instead of a soft-404 redirect to home. */}
+                    <Route path="*" element={<NotFound />} />
                   </Routes>
+
                   </MaintenanceGate>
                   </Suspense>
 

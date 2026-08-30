@@ -297,7 +297,7 @@ const Index = () => {
             </div>
           </div>
           <div className="flex items-center justify-center gap-6 sm:gap-10 flex-wrap py-5 px-6"
-            style={{ borderTop: `1px solid ${C.line}`, background: '#F3FAF6' }}>
+            style={{ borderTop: `1px solid ${C.line}`, background: '#E3F5EC' }}>
             {[
               { icon: '🏆', text: '50,000+ Orders Delivered' },
               { icon: '🛡️', text: 'Zero Account Bans' },

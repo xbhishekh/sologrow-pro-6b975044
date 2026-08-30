@@ -1,10 +1,20 @@
 import { useState } from 'react';
-import { Menu } from 'lucide-react';
+import { Menu, Rocket, ListOrdered, Wallet, Settings } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import logo from '@/assets/logo.jpg';
+import { cn } from '@/lib/utils';
+
+const bottomNavItems = [
+  { icon: Rocket, label: 'Full Engagement', path: '/engagement-order' },
+  { icon: ListOrdered, label: 'Orders', path: '/engagement-orders' },
+  { icon: Wallet, label: 'Wallet', path: '/wallet' },
+  { icon: Settings, label: 'Settings', path: '/settings' },
+];
 
 export function MobileBottomNav() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { pathname } = useLocation();
 
   return (
     <>
@@ -20,6 +30,23 @@ export function MobileBottomNav() {
           <div className="w-9" />
         </div>
       </header>
+
+      {/* Bottom nav — mobile par sirf 4 main items */}
+      <nav aria-label="Main navigation" className="fixed bottom-0 left-0 right-0 z-40 lg:hidden" style={{ background: 'rgba(255,255,255,.96)', backdropFilter: 'blur(12px)', borderTop: '1px solid rgba(0,0,0,.07)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="grid grid-cols-4">
+          {bottomNavItems.map((item) => {
+            const isActive = pathname === item.path || pathname.startsWith(item.path + '/');
+            return (
+              <Link key={item.path} to={item.path} className="flex flex-col items-center gap-1 py-2.5">
+                <span className={cn('flex items-center justify-center w-11 h-7 rounded-full transition-colors', isActive && 'bg-green-100')}>
+                  <item.icon className="w-[18px] h-[18px]" style={{ color: isActive ? '#16a34a' : '#64748b' }} />
+                </span>
+                <span className="text-[10px] font-semibold leading-none" style={{ color: isActive ? '#166534' : '#64748b' }}>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
 
       {sidebarOpen && (
         <>

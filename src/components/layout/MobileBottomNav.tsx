@@ -3,7 +3,7 @@ import { Menu, Rocket, ListOrdered, Wallet, Settings } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import logo from '@/assets/logo.jpg';
-import { cn } from '@/lib/utils';
+
 
 const bottomNavItems = [
   { icon: Rocket, label: 'Full Engagement', path: '/engagement-order' },

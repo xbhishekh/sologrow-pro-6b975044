@@ -106,6 +106,92 @@ export const platformPages: PlatformPage[] = [
       { question: "Do you offer a reseller API?", answer: "Yes. Reseller-tier accounts get API access so you can plug OrganicSMM into your own panel or automation." },
     ],
   },
+  {
+    slug: "facebook-smm-panel",
+    platform: "Facebook",
+    h1: "Facebook SMM Panel — Page Likes, Followers & Reels Views",
+    title: "Facebook SMM Panel — Buy Page Likes, Followers & Reels Views | OrganicSMM",
+    description:
+      "Facebook SMM panel with organic delivery for page likes, followers, post likes and Reels views. Drip-fed pacing, no password needed, cheapest rates in India.",
+    intro:
+      "Facebook pages grow on consistency, not spikes. Our panel drips page likes and followers across days, and pushes Reels views before any reaction lands, so Meta reads the growth as genuine audience interest.",
+    keywords: ["facebook smm panel", "buy facebook page likes india", "facebook reels views panel"],
+    services: [
+      { name: "Facebook Page Likes", desc: "Drip-fed page likes with daily caps.", from: "₹40 / 1K" },
+      { name: "Facebook Followers", desc: "Gradual follower growth, refill protected.", from: "₹45 / 1K" },
+      { name: "Facebook Reels Views", desc: "Views-first delivery for Reels momentum.", from: "₹3 / 1K" },
+      { name: "Facebook Post Likes & Reactions", desc: "Released only after views move.", from: "₹12 / 1K" },
+    ],
+    faqs: [
+      { question: "Is a Facebook SMM panel safe for business pages?", answer: "Yes. We only need the public page or post link — never your login — and every order is drip-fed with variance so Meta sees organic pacing." },
+      { question: "How long do Facebook page likes take?", answer: "Most page-like orders spread over 12–48 hours depending on quantity, which keeps the growth curve believable." },
+    ],
+  },
+  {
+    slug: "telegram-smm-panel",
+    platform: "Telegram",
+    h1: "Telegram SMM Panel — Channel Members, Post Views & Reactions",
+    title: "Telegram SMM Panel — Buy Channel Members & Post Views | OrganicSMM",
+    description:
+      "Telegram SMM panel for real channel members, post views, reactions and poll votes. Organic drip delivery, instant start and India's cheapest Telegram panel rates.",
+    intro:
+      "Telegram channels convert on social proof. We deliver post views first, then members and reactions, so new subscribers land on a channel that already looks active.",
+    keywords: ["telegram smm panel", "buy telegram members india", "telegram post views panel"],
+    services: [
+      { name: "Telegram Channel Members", desc: "Gradual member growth with low drop.", from: "₹90 / 1K" },
+      { name: "Telegram Post Views", desc: "Instant view boost on latest posts.", from: "₹2 / 1K" },
+      { name: "Telegram Reactions", desc: "Mixed emoji reactions for realism.", from: "₹15 / 1K" },
+      { name: "Telegram Poll Votes", desc: "Distributed voting across hours.", from: "Custom" },
+    ],
+    faqs: [
+      { question: "Do Telegram members drop after delivery?", answer: "Some natural drop is normal on Telegram. Orders under-delivering beyond the refill window are automatically topped up or refunded to your wallet." },
+      { question: "Do you need admin access to my channel?", answer: "No. Only the public channel or post link is required — never admin rights or your account." },
+    ],
+  },
+  {
+    slug: "best-smm-panel-india",
+    platform: "India",
+    h1: "Best SMM Panel in India 2026 — Organic Delivery, UPI Payments",
+    title: "Best SMM Panel in India 2026 — Organic, UPI & Reseller Rates | OrganicSMM",
+    description:
+      "Best SMM panel in India for 2026: organic drip delivery, UPI and crypto wallet top-ups, multi-provider rotation, reseller API and 24/7 live chat support.",
+    intro:
+      "Most Indian SMM panels resell the same bot traffic. OrganicSMM sequences every order the way a real post grows — views first, then likes, comments, shares and saves — across rotating providers, with an INR wallet funded by UPI in seconds.",
+    keywords: ["best smm panel india", "smm panel upi payment", "indian smm panel 2026"],
+    services: [
+      { name: "Instagram Growth", desc: "Reels views, likes, followers, story views.", from: "₹0.60 / 1K" },
+      { name: "YouTube Growth", desc: "Views, Shorts views, subscribers, watch time.", from: "₹6 / 1K" },
+      { name: "TikTok & Facebook", desc: "Views, likes, followers, shares and saves.", from: "₹1 / 1K" },
+      { name: "Reseller API", desc: "Plug OrganicSMM into your own panel.", from: "Up to 35% off" },
+    ],
+    faqs: [
+      { question: "Which is the best SMM panel in India?", answer: "The best panel is the one that delivers safely. OrganicSMM pairs Indian UPI payments with organic, views-first delivery and automatic refunds on failed runs — that combination is what keeps accounts safe long term." },
+      { question: "Can I pay with UPI on this SMM panel?", answer: "Yes. UPI top-ups credit your wallet instantly from ₹50, and crypto deposits are supported through OxaPay." },
+      { question: "Do you support resellers in India?", answer: "Yes. Wallet top-ups of ₹5,000+ unlock reseller pricing plus API access for your own panel or automation." },
+    ],
+  },
+  {
+    slug: "smm-panel-for-resellers",
+    platform: "Resellers",
+    h1: "SMM Panel for Resellers — API Access & Wholesale Rates",
+    title: "SMM Panel for Resellers — API, Wholesale Rates & Auto Refunds | OrganicSMM",
+    description:
+      "Reseller SMM panel with API access, wholesale bundle pricing, multi-provider rotation and automatic refunds on failed runs. Run your own panel on top of OrganicSMM.",
+    intro:
+      "Resellers need margin and reliability. Our API exposes the same organic engine our own panel runs on, with wholesale rates unlocked by wallet tier and automatic refunds when a provider under-delivers.",
+    keywords: ["smm panel for resellers", "smm panel api", "wholesale smm panel india"],
+    services: [
+      { name: "Reseller API", desc: "Place, track and refill orders programmatically.", from: "Free with tier" },
+      { name: "Wholesale Rates", desc: "Bundle pricing that drops with volume.", from: "Up to 35% off" },
+      { name: "Auto Refunds", desc: "Failed or partial runs refund to your wallet.", from: "Included" },
+      { name: "Priority Support", desc: "Live chat plus Telegram escalation.", from: "Included" },
+    ],
+    faqs: [
+      { question: "How do I get API access?", answer: "Create a free account, top up ₹5,000 or more, and the API key appears under API Access in your dashboard." },
+      { question: "What happens if a provider fails an order?", answer: "Our rotation retries with the next provider automatically. If the run still cannot complete, the unused amount is refunded to your wallet." },
+    ],
+  },
 ];
 
 export const platformBySlug = Object.fromEntries(platformPages.map((p) => [p.slug, p]));
+

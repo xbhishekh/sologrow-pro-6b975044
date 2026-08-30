@@ -53,6 +53,21 @@ if [ -z "$REASON" ] && [ -d "$APP_DIR/dist/assets" ]; then
     || REASON="frontend bundle contains a different key"
 fi
 
+# A local health response alone is not enough: Kong can answer /health while
+# the public password/signup route still rejects the browser's API key. Probe
+# the exact public auth path used by the app. Invalid dummy credentials should
+# reach GoTrue and return 400; 401 means the deployed auth key is rejected.
+if [ -z "$REASON" ] && [ -n "${APP_DOMAIN:-}" ]; then
+  PUBLIC_LOGIN_CODE=$(curl -sS --max-time 15 -o /tmp/organicsmm-auth-guard.json -w '%{http_code}' \
+    -X POST "https://$APP_DOMAIN/auth/v1/token?grant_type=password" \
+    -H "apikey: $STACK_ANON_KEY" -H 'Content-Type: application/json' \
+    --data '{"email":"auth-guard@invalid.example","password":"not-a-real-password"}' || true)
+  if [ "$PUBLIC_LOGIN_CODE" != "400" ] || ! grep -q 'invalid_credentials' /tmp/organicsmm-auth-guard.json 2>/dev/null; then
+    REASON="public auth route unhealthy (HTTP $PUBLIC_LOGIN_CODE)"
+  fi
+  rm -f /tmp/organicsmm-auth-guard.json
+fi
+
 if [ -z "$REASON" ]; then
   ok "OrganicSMM auth keys consistent"
   exit 0

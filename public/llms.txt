@@ -9,6 +9,9 @@ OrganicSMM is a wallet-based SMM platform with engagement bundles, multi-provide
 - [Home](/): Product overview, features and pricing highlights.
 - [Services](/services): Browse Instagram, YouTube, TikTok and Twitter/X services with prices and speeds.
 - [Sign in / Sign up](/auth): Create a free account or log in.
+- [Instagram Engagement Automation](/instagram-engagement-automation): Sequenced auto views, likes, comments and saves from one link.
+- [Engagement Automation Platform](/social-media-engagement-automation): Views-first sequencing engine across all platforms.
+- [Auto Engagement Panel](/auto-engagement-panel): One-link automated engagement bundles.
 - [Instagram SMM Panel](/instagram-smm-panel): Organic Reels views, likes, followers and story views.
 - [YouTube SMM Panel](/youtube-smm-panel): Views, Shorts views, subscribers and watch time.
 - [TikTok SMM Panel](/tiktok-smm-panel): Views, likes, followers, shares and saves.

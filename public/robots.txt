@@ -10,6 +10,9 @@ Allow: /instagram-smm-panel
 Allow: /youtube-smm-panel
 Allow: /tiktok-smm-panel
 Allow: /cheap-smm-panel
+Allow: /instagram-engagement-automation
+Allow: /social-media-engagement-automation
+Allow: /auto-engagement-panel
 Allow: /facebook-smm-panel
 Allow: /telegram-smm-panel
 Allow: /best-smm-panel-india

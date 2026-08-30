@@ -108,7 +108,7 @@ export default function EngagementOrder() {
 
   // Local settings toggles (defaulted from localStorage)
   const [isOrganicMode, setIsOrganicMode] = useState(true);
-  const [isAutoRatios, setIsAutoRatios] = useState(true);
+  const [isAutoRatios] = useState(true);
   // User-saved custom ratios from Settings page (stored in localStorage)
   const [userSavedRatios, setUserSavedRatios] = useState<Record<string, number> | null>(null);
 

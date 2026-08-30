@@ -473,11 +473,26 @@ const Index = () => {
               </p>
             </div>
             <div>
-              <h4 className="text-[12px] font-bold uppercase tracking-wider mb-4" style={{ color: C.ink }}>Quick Links</h4>
+              <h4 className="text-[12px] font-bold uppercase tracking-wider mb-4" style={{ color: C.ink }}>SMM Panels</h4>
               <div className="space-y-2.5">
-                <Link to="/auth" className="block text-[13px] hover:text-emerald-600 transition-colors" style={{ color: C.ink2 }}>Get Started</Link>
+                {[
+                  { to: '/services', label: 'All Services' },
+                  { to: '/instagram-smm-panel', label: 'Instagram SMM Panel' },
+                  { to: '/youtube-smm-panel', label: 'YouTube SMM Panel' },
+                  { to: '/tiktok-smm-panel', label: 'TikTok SMM Panel' },
+                  { to: '/facebook-smm-panel', label: 'Facebook SMM Panel' },
+                  { to: '/telegram-smm-panel', label: 'Telegram SMM Panel' },
+                  { to: '/best-smm-panel-india', label: 'Best SMM Panel India' },
+                  { to: '/cheap-smm-panel', label: 'Cheapest SMM Panel' },
+                  { to: '/smm-panel-for-resellers', label: 'SMM Panel for Resellers' },
+                  { to: '/blog/organic-instagram-growth', label: 'Organic Instagram Growth Guide' },
+                  { to: '/auth', label: 'Get Started' },
+                ].map((l) => (
+                  <Link key={l.to} to={l.to} className="block text-[13px] hover:text-emerald-600 transition-colors" style={{ color: C.ink2 }}>{l.label}</Link>
+                ))}
               </div>
             </div>
+
             <div>
               <h4 className="text-[12px] font-bold uppercase tracking-wider mb-4" style={{ color: C.ink }}>Legal</h4>
               <div className="space-y-2.5">

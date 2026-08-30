@@ -55,32 +55,47 @@ export default function Auth() {
     finally { setIsSubmitting(false); }
   };
 
+  const readableError = (raw: unknown, fallback: string) => {
+    let msg = '';
+    if (typeof raw === 'string') msg = raw;
+    else if (raw && typeof raw === 'object') msg = String((raw as any).message ?? (raw as any).error_description ?? (raw as any).error ?? '');
+    msg = msg.trim();
+    // GoTrue kabhi-kabhi khaali body bhejta hai -> "{}" / "[object Object]"
+    if (!msg || msg === '{}' || msg === '[object Object]' || msg === 'undefined' || msg === 'null') return fallback;
+    return msg;
+  };
+
+  const firstIssue = (err: any, fallback: string) =>
+    err?.issues?.[0]?.message ?? err?.errors?.[0]?.message ?? fallback;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(''); setSuccessMessage(''); setIsSubmitting(true);
     try {
       if (isLogin) {
         const v = loginSchema.safeParse({ email, password });
-        if (!v.success) { setError(v.error.errors[0].message); setIsSubmitting(false); return; }
+        if (!v.success) { setError(firstIssue(v.error, 'Please check your details.')); setIsSubmitting(false); return; }
         const { error } = await signIn(email, password);
         if (error) {
-          const msg = error.message.toLowerCase();
+          const msg = readableError(error, '').toLowerCase();
           if (msg.includes('invalid login credentials')) setError('Incorrect email or password.');
           else if (msg.includes('email not confirmed')) setError('Please verify your email first.');
           else if (msg.includes('rate limit')) setError('Too many attempts. Try again in 5 mins.');
-          else setError('Login failed.');
+          else setError('Login failed. Please try again.');
           setIsSubmitting(false); return;
         }
         navigate('/engagement-order', { replace: true });
       } else {
         const v = signupSchema.safeParse({ email, password, fullName });
-        if (!v.success) { setError(v.error.errors[0].message); setIsSubmitting(false); return; }
+        if (!v.success) { setError(firstIssue(v.error, 'Please check your details.')); setIsSubmitting(false); return; }
         const { error, needsEmailConfirmation } = await signUp(email, password, fullName);
         if (error) {
-          const msg = error.message.toLowerCase();
-          if (msg.includes('already registered')) setError('This email is already registered.');
-          else if (msg.includes('rate limit')) setError('Too many attempts. Wait 5 minutes.');
-          else setError(error.message || 'Signup failed.');
+          const clean = readableError(error, 'Signup failed. Please try again.');
+          const msg = clean.toLowerCase();
+          if (msg.includes('already registered') || msg.includes('already been registered') || msg.includes('user already')) setError('This email is already registered. Please sign in.');
+          else if (msg.includes('rate limit') || msg.includes('too many')) setError('Too many attempts. Wait 5 minutes.');
+          else if (msg.includes('password')) setError('Password must be at least 6 characters.');
+          else setError(clean);
           setIsSubmitting(false); return;
         }
         if (needsEmailConfirmation) {
@@ -91,9 +106,10 @@ export default function Auth() {
         }
       }
     } catch (err: any) {
-      if (!err?.message?.includes('abort')) setError('Something went wrong. Please try again.');
+      if (!String(err?.message ?? '').includes('abort')) setError('Something went wrong. Please try again.');
     } finally { setIsSubmitting(false); }
   };
+
 
   const inputClass = "h-12 rounded-xl border-[#e5e5e5] bg-white focus:border-[#1a1a2e] focus:ring-1 focus:ring-[#1a1a2e] text-[#1a1a2e] font-medium px-4 placeholder:text-[#bbb] transition-all";
 

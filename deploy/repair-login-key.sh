@@ -66,17 +66,47 @@ cd "$SUPABASE_DIR/docker"
 export JWT_SECRET="$STACK_JWT_SECRET"
 export ANON_KEY="$STACK_ANON_KEY"
 export SERVICE_ROLE_KEY="$STACK_SERVICE_KEY"
+
+# Auth can briefly look healthy while its DB connection is still unavailable,
+# then Kong starts returning 502 on the real login route. Start and verify the
+# database first; this never recreates the DB or its volume.
+docker compose up -d db
+DB_READY=0
+for _ in $(seq 1 45); do
+  if docker compose exec -T db pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; then
+    DB_READY=1
+    break
+  fi
+  sleep 2
+done
+[ "$DB_READY" = "1" ] || die "database did not become ready; auth was not restarted"
+ok "database ready"
+
 docker compose up -d --force-recreate kong auth rest functions
 
 AUTH_CODE="000"
-for _ in $(seq 1 30); do
-  AUTH_CODE=$(curl -sS -o /tmp/organicsmm-auth-health.json -w '%{http_code}' \
-    -H "apikey: $STACK_ANON_KEY" "http://127.0.0.1:8000/auth/v1/health" || true)
-  [ "$AUTH_CODE" = "200" ] && break
+AUTH_STABLE=0
+for _ in $(seq 1 45); do
+  AUTH_CODE=$(curl -sS --max-time 10 -o /tmp/organicsmm-auth-local.json -w '%{http_code}' \
+    -X POST "http://127.0.0.1:8000/auth/v1/token?grant_type=password" \
+    -H "apikey: $STACK_ANON_KEY" -H 'Content-Type: application/json' \
+    --data '{"email":"login-health-probe@invalid.example","password":"not-a-real-password"}' || true)
+  if [ "$AUTH_CODE" = "400" ] && grep -q 'invalid_credentials' /tmp/organicsmm-auth-local.json 2>/dev/null; then
+    AUTH_STABLE=$((AUTH_STABLE + 1))
+    [ "$AUTH_STABLE" -ge 3 ] && break
+  else
+    AUTH_STABLE=0
+  fi
   sleep 2
 done
-[ "$AUTH_CODE" = "200" ] || die "regenerated key still rejected locally (HTTP $AUTH_CODE)"
-ok "backend key regenerated and accepted"
+if [ "$AUTH_STABLE" -lt 3 ]; then
+  printf '%s\n' "--- auth service logs ---"
+  docker compose logs --tail=50 auth || true
+  rm -f /tmp/organicsmm-auth-local.json
+  die "password-login backend unhealthy after restart (HTTP $AUTH_CODE)"
+fi
+rm -f /tmp/organicsmm-auth-local.json
+ok "backend password-login route stable and key accepted"
 
 # Password login depends on healthy legacy user/identity rows too. Repair them
 # when the original migration export is available; do not fail fresh installs.

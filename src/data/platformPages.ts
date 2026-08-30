@@ -191,6 +191,90 @@ export const platformPages: PlatformPage[] = [
       { question: "What happens if a provider fails an order?", answer: "Our rotation retries with the next provider automatically. If the run still cannot complete, the unused amount is refunded to your wallet." },
     ],
   },
+  {
+    slug: "instagram-engagement-automation",
+    platform: "Instagram Automation",
+    h1: "Instagram Engagement Automation — Views, Likes & Comments on Autopilot",
+    title: "Instagram Engagement Automation Tool — Auto Views, Likes & Comments | OrganicSMM",
+    description:
+      "Automate Instagram engagement the organic way. One link triggers a full sequence: Reels views first, then likes, comments, shares, reposts and saves — drip-fed on autopilot.",
+    intro:
+      "This is not a manual SMM order form. You drop one Reel link, pick a bundle, and the engine runs the whole sequence itself — views gate first, then likes, comments, shares, reposts and saves release in ratio behind them, spread across peak hours with variance so nothing looks scripted.",
+    keywords: [
+      "instagram engagement automation",
+      "auto engagement tool instagram",
+      "automated instagram growth",
+      "instagram engagement bot alternative",
+    ],
+    services: [
+      { name: "Automated Views Gate", desc: "Reels views must move before any other signal fires.", from: "Built-in" },
+      { name: "Ratio Engine", desc: "Likes, comments, shares and saves auto-scaled to view count.", from: "Built-in" },
+      { name: "Peak-Hour Scheduler", desc: "Delivery weighted to when your audience is online.", from: "Built-in" },
+      { name: "Provider Rotation", desc: "Multi-provider failover so a run never stalls.", from: "Built-in" },
+      { name: "Auto Refund", desc: "Failed or partial runs refund to your wallet automatically.", from: "Included" },
+    ],
+    faqs: [
+      { question: "How is engagement automation different from a normal SMM panel?", answer: "A normal panel places one service at a time and dumps it instantly. Our engine takes one link and runs a sequenced campaign: views first, then likes, comments, shares, reposts and saves, each released on a schedule with variance." },
+      { question: "Is this an Instagram bot?", answer: "No. Nothing is installed and no login is used — only your public post link. The automation lives on our side, orchestrating delivery order and pacing." },
+      { question: "Can I automate every new Reel I post?", answer: "Yes. Create an engagement bundle once and fire it on each new link; the API also lets you trigger runs from your own tooling." },
+      { question: "Do the comments look real?", answer: "Comments are released only after views and likes have moved, in small batches spread over hours, so the comment-to-view ratio stays inside a believable range." },
+    ],
+  },
+  {
+    slug: "social-media-engagement-automation",
+    platform: "Automation",
+    h1: "Social Media Engagement Automation Platform",
+    title: "Social Media Engagement Automation — Sequenced Organic Delivery | OrganicSMM",
+    description:
+      "Engagement automation platform for Instagram, YouTube, TikTok, Facebook and Telegram. Sequenced views-first delivery, S-curve pacing, provider rotation and automatic refunds.",
+    intro:
+      "OrganicSMM is an automation layer, not a storefront. Every campaign runs through the same engine: a views gate, priority-ordered auxiliary signals, S-curve pacing with variance, peak-hour weighting, live provider rotation and refunds triggered by the system itself when a run under-delivers.",
+    keywords: [
+      "social media engagement automation",
+      "engagement automation platform",
+      "automated social media growth tool",
+      "organic delivery automation",
+    ],
+    services: [
+      { name: "Campaign Sequencer", desc: "Views → likes → comments → shares → reposts → saves.", from: "Built-in" },
+      { name: "S-Curve Pacing", desc: "Slow start, natural peak, gentle tail with ±variance.", from: "Built-in" },
+      { name: "Health-Aware Rotation", desc: "Admin-priority provider routing with failover.", from: "Built-in" },
+      { name: "Duplicate Loss Guard", desc: "Blocks double-processing on the same link.", from: "Built-in" },
+      { name: "Reseller API", desc: "Trigger automated campaigns programmatically.", from: "Free with tier" },
+    ],
+    faqs: [
+      { question: "What does the automation actually control?", answer: "Order of signals, hourly volume curve, variance, peak-hour weighting, which provider each run goes to, retries after failure, and refunds — all without you touching the panel again." },
+      { question: "Which platforms are supported?", answer: "Instagram, YouTube, TikTok, Facebook and Telegram, all through the same sequencing engine." },
+      { question: "Can I automate this from my own app?", answer: "Yes. The reseller API exposes campaign creation, run status and refill so you can trigger engagement automatically from your own workflow." },
+    ],
+  },
+  {
+    slug: "auto-engagement-panel",
+    platform: "Auto Engagement",
+    h1: "Auto Engagement Panel — One Link, Full Campaign",
+    title: "Auto Engagement Panel — Automated Views, Likes & Comments Bundles | OrganicSMM",
+    description:
+      "Auto engagement panel that runs full campaigns from a single link. Automated view gating, ratio-matched likes and comments, drip pacing, rotation and instant UPI wallet top-ups.",
+    intro:
+      "Paste one link, pick an engagement bundle, and the panel does the rest — the run splits itself into views, likes, comments, shares, reposts and saves, each scheduled automatically so the post grows the way a real one does.",
+    keywords: [
+      "auto engagement panel",
+      "automatic engagement bundle",
+      "auto likes and views panel india",
+      "engagement automation upi",
+    ],
+    services: [
+      { name: "One-Link Campaign", desc: "Single link expands into a full engagement run.", from: "From ₹50" },
+      { name: "Preset Bundles", desc: "Ready ratios for Reels, Shorts and posts.", from: "From ₹50" },
+      { name: "Auto Retry", desc: "Failed runs re-route to the next provider by themselves.", from: "Included" },
+      { name: "Instant UPI Wallet", desc: "Top up and automation resumes immediately.", from: "₹50 min" },
+    ],
+    faqs: [
+      { question: "Do I have to place each service separately?", answer: "No — that is the point of the auto panel. One link plus one bundle produces every service in the correct order automatically." },
+      { question: "Can I control the ratios?", answer: "Yes. Bundles ship with tuned defaults, and you can override per-service quantities before firing the campaign." },
+      { question: "What happens if a provider fails mid-campaign?", answer: "Rotation moves the run to the next provider automatically. If it still cannot finish, the unused amount is refunded to your wallet without you raising a ticket." },
+    ],
+  },
 ];
 
 export const platformBySlug = Object.fromEntries(platformPages.map((p) => [p.slug, p]));

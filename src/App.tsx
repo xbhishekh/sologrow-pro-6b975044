@@ -11,6 +11,7 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { toast } from "sonner";
 import { AppErrorBoundary } from "@/components/app/AppErrorBoundary";
 import { TelegramJoinPopup } from "@/components/TelegramJoinPopup";
+import { MaintenanceGate } from "@/components/MaintenanceGate";
 
 
 // Landing + auth stay eager (first paint). Everything else is code-split

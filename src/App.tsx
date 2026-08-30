@@ -142,6 +142,7 @@ const App = () => {
                 <ScrollToTop />
                 <TelegramJoinPopup />
                   <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</div>}>
+                  <MaintenanceGate>
                   <Routes>
                     {/* User pages */}
                     <Route path="/" element={<Index />} />

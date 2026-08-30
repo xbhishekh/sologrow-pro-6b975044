@@ -81,6 +81,9 @@ const AboutUs = lazy(() => import("./pages/legal/AboutUs"));
 const Services = lazy(() => import("./pages/Services"));
 const PlatformLanding = lazy(() => import("./pages/landing/PlatformLanding"));
 const ShippingPolicy = lazy(() => import("./pages/legal/ShippingPolicy"));
+const OrganicInstagramGrowth = lazy(() => import("./pages/blog/OrganicInstagramGrowth"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
 
 const queryClient = new QueryClient({
   defaultOptions: {

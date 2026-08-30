@@ -6,7 +6,7 @@ import { PageMeta } from '@/components/seo/PageMeta';
 
 // Brand palette — clean light + soft orange
 const C = {
-  bg: '#FAFAF7',
+  bg: 'linear-gradient(180deg, #FAFAF7 0%, #F2FAF5 45%, #EAF7EF 100%)',
   ink: '#0B0B12',
   ink2: '#5B5B6B',
   muted: '#6B6B78',
@@ -62,12 +62,14 @@ const Index = () => {
         breadcrumbs={[{ name: 'Home', path: '/' }]}
       />
 
-      {/* Subtle background glow */}
+{/* Subtle background glow */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[1100px] h-[600px] rounded-full"
           style={{ background: 'radial-gradient(closest-side, rgba(16,185,129,.20), transparent 70%)', filter: 'blur(20px)' }} />
         <div className="absolute top-[40%] -right-40 w-[500px] h-[500px] rounded-full"
           style={{ background: 'radial-gradient(closest-side, rgba(110,231,183,.25), transparent 70%)', filter: 'blur(20px)' }} />
+        <div className="absolute bottom-[-140px] -left-44 w-[640px] h-[540px] rounded-full"
+          style={{ background: 'radial-gradient(closest-side, rgba(16,185,129,.15), transparent 70%)', filter: 'blur(20px)' }} />
       </div>
 
       {/* ═══ NAV ═══ */}
@@ -295,7 +297,7 @@ const Index = () => {
             </div>
           </div>
           <div className="flex items-center justify-center gap-6 sm:gap-10 flex-wrap py-5 px-6"
-            style={{ borderTop: `1px solid ${C.line}`, background: '#FAFAF7' }}>
+            style={{ borderTop: `1px solid ${C.line}`, background: '#F3FAF6' }}>
             {[
               { icon: '🏆', text: '50,000+ Orders Delivered' },
               { icon: '🛡️', text: 'Zero Account Bans' },

@@ -21,7 +21,7 @@ input[type="number"] {
   :root {
     /* ════ CLEAN LIGHT PINK THEME ════ */
     --background: 30 20% 98%;
-    --foreground: 240 20% 12%;
+    --foreground: 240 24% 9%;
 
     --card: 0 0% 100%;
     --card-foreground: 240 20% 12%;
@@ -36,7 +36,7 @@ input[type="number"] {
     --secondary-foreground: 240 20% 12%;
 
     --muted: 30 15% 95%;
-    --muted-foreground: 240 5% 50%;
+    --muted-foreground: 240 8% 34%;
 
     --accent: 160 84% 39%;
     --accent-foreground: 0 0% 100%;
@@ -50,8 +50,8 @@ input[type="number"] {
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 30 10% 90%;
-    --input: 30 10% 90%;
+    --border: 30 10% 84%;
+    --input: 30 10% 84%;
     --ring: 160 84% 39%;
 
     --radius: 1rem;

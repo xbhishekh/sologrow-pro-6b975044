@@ -43,7 +43,7 @@ export function Sidebar({ onClose }: SidebarProps) {
             <span className="text-[9px] font-semibold uppercase tracking-[0.15em] leading-tight" style={{ background: 'linear-gradient(90deg, #16a34a, #f97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>✦ Updated Version</span>
           </div>
         </Link>
-        <button onClick={onClose} aria-label="Close sidebar" className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg" style={{ color: '#ccc' }}>
+        <button onClick={onClose} aria-label="Close sidebar" className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg" style={{ color: '#94a3b8' }}>
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -56,7 +56,7 @@ export function Sidebar({ onClose }: SidebarProps) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[12px] font-semibold truncate" style={{ color: '#1a1a2e' }}>{accountName}</p>
-            <p className="text-[10px] truncate" style={{ color: '#aaa' }}>{accountEmail}</p>
+            <p className="text-[10px] truncate" style={{ color: '#64748b' }}>{accountEmail}</p>
           </div>
         </div>
       )}
@@ -77,7 +77,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 pb-3 scrollbar-thin">
-        <p className="px-3 mb-2 text-[9px] font-semibold uppercase tracking-wider" style={{ color: '#ccc' }}>Menu</p>
+        <p className="px-3 mb-2 text-[9px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Menu</p>
         {userNavItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -87,11 +87,11 @@ export function Sidebar({ onClose }: SidebarProps) {
               )}
               style={{
                 background: isActive ? '#f0fdf4' : 'transparent',
-                color: isActive ? '#166534' : '#666',
+                color: isActive ? '#166534' : '#334155',
                 border: isActive ? '1px solid #dcfce7' : '1px solid transparent',
               }}
             >
-              <item.icon className="w-4 h-4" style={{ color: isActive ? '#16a34a' : '#bbb' }} />
+              <item.icon className="w-4 h-4" style={{ color: isActive ? '#16a34a' : '#64748b' }} />
               <span className="flex-1">{item.label}</span>
               {(item as any).highlight && !isActive && (
                 <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#dcfce7', color: '#16a34a' }}>HOT</span>
@@ -103,7 +103,7 @@ export function Sidebar({ onClose }: SidebarProps) {
         {isAdmin && (
           <>
             <div className="my-3 mx-3" style={{ borderTop: '1px solid #f5f0f4' }} />
-            <p className="px-3 mb-2 text-[9px] font-semibold uppercase tracking-wider" style={{ color: '#ccc' }}>Admin</p>
+            <p className="px-3 mb-2 text-[9px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Admin</p>
             {adminNavItems.map((item) => {
               const isActive = location.pathname.startsWith(item.path);
               return (
@@ -111,11 +111,11 @@ export function Sidebar({ onClose }: SidebarProps) {
                   className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium mb-0.5 transition-all duration-150"
                   style={{
                     background: isActive ? '#fef2f2' : 'transparent',
-                    color: isActive ? '#dc2626' : '#666',
+                    color: isActive ? '#dc2626' : '#334155',
                     border: isActive ? '1px solid #fecaca' : '1px solid transparent',
                   }}
                 >
-                  <item.icon className="w-4 h-4" style={{ color: isActive ? '#ef4444' : '#bbb' }} />
+                  <item.icon className="w-4 h-4" style={{ color: isActive ? '#ef4444' : '#64748b' }} />
                   <span>{item.label}</span>
                 </Link>
               );
@@ -126,7 +126,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 
       {/* Currency */}
       <div className="px-3 pb-2">
-        <div className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-[12px] font-medium" style={{ color: '#888', background: '#fafafa', border: '1px solid #f0e8ef' }}>
+        <div className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-[12px] font-medium" style={{ color: '#475569', background: '#fafafa', border: '1px solid #f0e8ef' }}>
           <div className="flex items-center gap-2">
             <span className="text-base">🇮🇳</span>
             <span className="uppercase tracking-wider">INR</span>
@@ -143,14 +143,14 @@ export function Sidebar({ onClose }: SidebarProps) {
           <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
           <div className="flex flex-col">
             <span className="font-semibold text-[11px]" style={{ color: '#0284c7' }}>Join our Telegram</span>
-            <span className="text-[10px]" style={{ color: '#7dd3fc' }}>Updates & support</span>
+            <span className="text-[10px]" style={{ color: '#0369a1' }}>Updates & support</span>
           </div>
         </a>
       </div>
 
       {/* Sign out */}
       <div className="p-3" style={{ borderTop: '1px solid #f5f0f4' }}>
-        <button onClick={() => signOut()} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-colors hover:bg-red-50" style={{ color: '#aaa' }}>
+        <button onClick={() => signOut()} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-colors hover:bg-red-50" style={{ color: '#64748b' }}>
           <LogOut className="w-3.5 h-3.5" style={{ color: '#ef4444' }} />
           <span>Sign out</span>
         </button>

@@ -1,10 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   EngagementConfig, 
   EngagementType, 
@@ -23,8 +19,7 @@ import {
   curveToSchedule, 
   interpolateCurve 
 } from "@/lib/curve-to-schedule";
-import { format } from "date-fns";
-import { Clock, TrendingUp, Zap, Timer, Calendar, Pencil, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Clock, TrendingUp, Zap, Timer, Calendar } from "lucide-react";
 
 type Platform = 'instagram' | 'tiktok' | 'youtube' | 'twitter' | 'facebook';
 
@@ -275,36 +270,6 @@ export function DeliveryPreview({ engagements, refreshKey = 0, platform = 'insta
     onScheduleChange?.({ schedules, customQuantities });
   }, [schedules, customQuantities, onScheduleChange]);
 
-  const handleEdit = (event: TimelineEvent) => {
-    setEditingId(event.id);
-    setEditValue(event.quantity);
-  };
-
-  const handleSave = () => {
-    if (editingId) {
-      setCustomQuantities(prev => ({
-        ...prev,
-        [editingId]: editValue,
-      }));
-      setEditingId(null);
-    }
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-  };
-
-  // Calculate cumulative totals per type
-  const getCumulativeTotal = (eventId: string, type: EngagementType) => {
-    let total = 0;
-    for (const event of timeline) {
-      if (event.type === type) {
-        total += event.quantity;
-        if (event.id === eventId) break;
-      }
-    }
-    return total;
-  };
 
   if (timeline.length === 0) {
     return null;

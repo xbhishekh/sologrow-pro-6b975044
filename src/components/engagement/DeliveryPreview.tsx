@@ -1,10 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   EngagementConfig, 
   EngagementType, 
@@ -23,8 +19,7 @@ import {
   curveToSchedule, 
   interpolateCurve 
 } from "@/lib/curve-to-schedule";
-import { format } from "date-fns";
-import { Clock, TrendingUp, Zap, Timer, Calendar, Pencil, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Clock, TrendingUp, Zap, Timer, Calendar } from "lucide-react";
 
 type Platform = 'instagram' | 'tiktok' | 'youtube' | 'twitter' | 'facebook';
 
@@ -49,10 +44,7 @@ interface TimelineEvent {
 }
 
 export function DeliveryPreview({ engagements, refreshKey = 0, platform = 'instagram', customCurvePoints, onScheduleChange }: DeliveryPreviewProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<number>(0);
   const [customQuantities, setCustomQuantities] = useState<Record<string, number>>({});
-  const [isTimelineOpen, setIsTimelineOpen] = useState(false);
 
   // Reset custom quantities when engagements, refreshKey, or curve changes
   useEffect(() => {
@@ -275,36 +267,6 @@ export function DeliveryPreview({ engagements, refreshKey = 0, platform = 'insta
     onScheduleChange?.({ schedules, customQuantities });
   }, [schedules, customQuantities, onScheduleChange]);
 
-  const handleEdit = (event: TimelineEvent) => {
-    setEditingId(event.id);
-    setEditValue(event.quantity);
-  };
-
-  const handleSave = () => {
-    if (editingId) {
-      setCustomQuantities(prev => ({
-        ...prev,
-        [editingId]: editValue,
-      }));
-      setEditingId(null);
-    }
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-  };
-
-  // Calculate cumulative totals per type
-  const getCumulativeTotal = (eventId: string, type: EngagementType) => {
-    let total = 0;
-    for (const event of timeline) {
-      if (event.type === type) {
-        total += event.quantity;
-        if (event.id === eventId) break;
-      }
-    }
-    return total;
-  };
 
   if (timeline.length === 0) {
     return null;
@@ -379,95 +341,7 @@ export function DeliveryPreview({ engagements, refreshKey = 0, platform = 'insta
           </div>
         </div>
 
-        {/* Collapsible Timeline */}
-        <Collapsible open={isTimelineOpen} onOpenChange={setIsTimelineOpen}>
-          <CollapsibleTrigger asChild>
-            <Button 
-              variant="outline" 
-              className="w-full h-9 sm:h-10 text-xs gap-1.5 sm:gap-2 border-border hover:bg-muted font-bold text-foreground mb-2"
-            >
-              {isTimelineOpen ? <ChevronUp className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> : <ChevronDown className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
-              {isTimelineOpen ? 'Hide' : 'View'} Schedule ({timeline.length})
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <ScrollArea className="h-[300px] sm:h-[400px]">
-              <div className="relative pr-2 sm:pr-4">
-                {/* Timeline line */}
-                <div className="absolute left-[18px] sm:left-[30px] top-0 bottom-0 w-0.5 bg-border" />
-                
-                <div className="space-y-1.5 sm:space-y-2">
-                  {timeline.map((event, index) => {
-                    const config = ENGAGEMENT_CONFIG[event.type];
-                    const isEditing = editingId === event.id;
-                    const cumulativeTotal = getCumulativeTotal(event.id, event.type);
-                    
-                    return (
-                      <div
-                        key={event.id}
-                        className="flex items-start gap-2 sm:gap-3 pl-1 sm:pl-2 relative"
-                      >
-                        {/* Timeline dot */}
-                        <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full border-2 bg-background border-foreground z-10 flex-shrink-0 mt-1.5 sm:mt-1" />
-                        
-                        <div className="flex-1 flex flex-wrap sm:flex-nowrap items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-lg bg-secondary border border-border hover:bg-muted transition-colors min-w-0">
-                          <div className="text-[10px] sm:text-xs font-mono text-muted-foreground shrink-0">
-                            {format(event.time, 'HH:mm')}
-                          </div>
-                          
-                          {isEditing ? (
-                            <div className="flex items-center gap-1 w-full sm:w-auto">
-                              <Input
-                                type="number"
-                                value={editValue}
-                                onChange={(e) => setEditValue(parseInt(e.target.value) || 0)}
-                                className="w-16 sm:w-20 h-6 sm:h-7 text-xs font-mono bg-background border-border"
-                                autoFocus
-                              />
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                className="h-6 w-6 sm:h-7 sm:w-7 p-0"
-                                onClick={handleSave}
-                              >
-                                <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-foreground" />
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                className="h-6 w-6 sm:h-7 sm:w-7 p-0"
-                                onClick={handleCancel}
-                              >
-                                <X className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <>
-                              <Badge className="font-mono text-[10px] sm:text-xs bg-foreground text-background font-bold px-1.5 sm:px-2">
-                                {config?.emoji} +{event.quantity.toLocaleString()}
-                              </Badge>
-                              <Badge variant="outline" className="text-[9px] sm:text-[10px] border-border text-foreground font-mono px-1 sm:px-2">
-                                ={cumulativeTotal.toLocaleString()}
-                              </Badge>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 sm:h-7 px-1.5 sm:px-2 ml-auto text-muted-foreground hover:text-foreground"
-                                onClick={() => handleEdit(event)}
-                              >
-                                <Pencil className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </ScrollArea>
-          </CollapsibleContent>
-        </Collapsible>
+        {/* Timeline dropdown removed per admin request — edit/schedule UI hidden from users */}
       </CardContent>
     </Card>
   );

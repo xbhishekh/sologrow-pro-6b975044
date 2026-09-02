@@ -44,10 +44,7 @@ interface TimelineEvent {
 }
 
 export function DeliveryPreview({ engagements, refreshKey = 0, platform = 'instagram', customCurvePoints, onScheduleChange }: DeliveryPreviewProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<number>(0);
   const [customQuantities, setCustomQuantities] = useState<Record<string, number>>({});
-  const [isTimelineOpen, setIsTimelineOpen] = useState(false);
 
   // Reset custom quantities when engagements, refreshKey, or curve changes
   useEffect(() => {

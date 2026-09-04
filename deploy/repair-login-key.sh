@@ -305,8 +305,9 @@ if ! caddy validate --config "$CADDY_FILE"; then
   cp "${CADDY_FILE}.before-login-repair" "$CADDY_FILE"
   die "OrganicSMM Caddy route invalid; original config restored"
 fi
-systemctl reload caddy
+systemctl reload caddy || systemctl restart caddy || true
 ok "OrganicSMM Caddy route pinned to ports 3000/8000; other sites preserved"
+fi
 
 # Install a lightweight recurring guard. It only performs the expensive repair
 # when stack secrets, running auth, and the frontend bundle stop matching.

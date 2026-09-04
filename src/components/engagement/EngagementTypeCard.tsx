@@ -857,41 +857,10 @@ export function EngagementTypeCard({
                                     <span className="font-bold text-foreground truncate">{format(run.scheduledAt, 'MMM d, h:mm')}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-                                    {editingRunIndex === idx ? (
-                                      <Input
-                                        type="text"
-                                        inputMode="numeric"
-                                        pattern="[0-9]*"
-                                        defaultValue={customRunQuantities[idx] ?? run.quantity}
-                                        className="w-16 sm:w-20 h-5 sm:h-6 text-[10px] sm:text-xs text-right font-mono bg-secondary border-border text-foreground font-bold"
-                                        min={providerMin}
-                                        autoFocus
-                                        onBlur={(e) => {
-                                          const val = parseInt(e.target.value) || run.quantity;
-                                          const clamped = Math.max(providerMin, val);
-                                          setCustomRunQuantities(prev => ({ ...prev, [idx]: clamped }));
-                                          setEditingRunIndex(null);
-                                        }}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            const val = parseInt((e.target as HTMLInputElement).value) || run.quantity;
-                                            const clamped = Math.max(providerMin, val);
-                                            setCustomRunQuantities(prev => ({ ...prev, [idx]: clamped }));
-                                            setEditingRunIndex(null);
-                                          }
-                                        }}
-                                      />
-                                    ) : (
-                                      <button
-                                        onClick={() => setEditingRunIndex(idx)}
-                                        className="flex items-center gap-0.5 sm:gap-1 hover:bg-secondary px-1 sm:px-2 py-0.5 sm:py-1 rounded transition-colors"
-                                      >
-                                        <span className="font-mono font-bold text-foreground text-[10px] sm:text-xs">
-                                          +{(customRunQuantities[idx] ?? run.quantity).toLocaleString()}
-                                        </span>
-                                        <Pencil className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground opacity-50" />
-                                      </button>
-                                    )}
+                                    <span className="font-mono font-bold text-foreground text-[10px] sm:text-xs px-1 sm:px-2">
+                                      +{(customRunQuantities[idx] ?? run.quantity).toLocaleString()}
+                                    </span>
+
                                     {peakHoursEnabled && run.peakMultiplier > 1.1 && (
                                       <Badge className="text-[8px] sm:text-[9px] px-1 sm:px-1.5 py-0 bg-foreground text-background hidden sm:flex">
                                         <Flame className="h-2 w-2 sm:h-2.5 sm:w-2.5 mr-0.5" />

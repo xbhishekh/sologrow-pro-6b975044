@@ -135,9 +135,12 @@ export VITE_SUPABASE_PROJECT_ID="selfhosted"
 
 log "frontend rebuild (only smmpanel service will restart)"
 cd "$APP_DIR"
-pnpm install --frozen-lockfile || pnpm install
+# VPS currently runs Node 20. pnpm 11 requires Node 22 and crashes while
+# loading node:sqlite, so use the committed npm lockfile for a reproducible
+# Node 20-compatible build instead of relying on the globally selected pnpm.
+npm ci --legacy-peer-deps
 rm -rf dist-new dist-old
-pnpm exec vite build --outDir dist-new --emptyOutDir
+npm exec -- vite build --outDir dist-new --emptyOutDir
 [ -f dist-new/index.html ] || die "build output missing; old site unchanged"
 [ -d dist ] && mv dist dist-old
 mv dist-new dist

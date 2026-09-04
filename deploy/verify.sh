@@ -26,7 +26,9 @@ vpsql -Atc "select 'policies: '||count(*) from pg_policies where schemaname='pub
 vpsql -Atc "select 'functions: '||count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public';"
 vpsql -Atc "select 'auth users: '||count(*) from auth.users;"
 vpsql -Atc "select 'users w/o password: '||count(*) from auth.users where coalesce(encrypted_password,'')='';"
-vpsql -Atc "select 'users with invalid password hash: '||count(*) from auth.users where coalesce(encrypted_password,'') !~ '^\\$2[aby]\\$';"
+# [$] matches a literal dollar sign without Bash interpreting "$2" as a
+# positional parameter under `set -u`.
+vpsql -Atc "select 'users with invalid password hash: '||count(*) from auth.users where coalesce(encrypted_password,'') !~ '^[$]2[aby][$]';"
 vpsql -Atc "select 'users missing email identity: '||count(*) from auth.users u where not exists (select 1 from auth.identities i where i.user_id=u.id and i.provider='email');"
 vpsql -Atc "select 'tables missing grants: '||count(*) from pg_tables t where schemaname='public' and not exists (select 1 from information_schema.role_table_grants g where g.table_schema='public' and g.table_name=t.tablename and g.grantee='authenticated');"
 

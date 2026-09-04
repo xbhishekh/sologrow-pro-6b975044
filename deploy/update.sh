@@ -20,11 +20,13 @@ git reset --hard "origin/${REPO_BRANCH:-main}"
 ok "$(git log -1 --oneline)"
 
 log "deps"
-pnpm install --frozen-lockfile || pnpm install
+# Do not use the VPS-global pnpm: pnpm 11 needs Node 22, while this server is
+# intentionally on Node 20. package-lock.json is committed for this build.
+npm ci --legacy-peer-deps
 
 log "build -> dist-new (atomic)"
 rm -rf dist-new dist-old
-if ! pnpm exec vite build --outDir dist-new --emptyOutDir; then
+if ! npm exec -- vite build --outDir dist-new --emptyOutDir; then
   rm -rf dist-new
   die "BUILD FAIL — purana dist chalu hai, site down nahi hui"
 fi

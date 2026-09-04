@@ -26,7 +26,7 @@ import { ControlPoint, curveToSchedule } from "@/lib/curve-to-schedule";
 import {
   Eye, Heart, MessageCircle, Bookmark, Share2,
   Clock, Sparkles, AlertTriangle,
-  Timer, Shuffle, Flame, Calendar, ChevronDown, ChevronUp, List, Pencil,
+  Timer, Shuffle, Flame, Calendar, ChevronDown, ChevronUp, List,
   UserPlus, Bell, Repeat, RefreshCw
 } from "lucide-react";
 import { format } from "date-fns";
@@ -81,7 +81,6 @@ export function EngagementTypeCard({
   const { formatPrice } = useCurrency();
   const [customHoursInput, setCustomHoursInput] = useState('24');
   const [isTimelineOpen, setIsTimelineOpen] = useState(false);
-  const [editingRunIndex, setEditingRunIndex] = useState<number | null>(null);
   const [customRunQuantities, setCustomRunQuantities] = useState<Record<number, number>>({});
   const [customRunsInput, setCustomRunsInput] = useState<string>(
     config.runCount ? String(config.runCount) : ''

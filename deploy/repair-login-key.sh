@@ -232,8 +232,32 @@ grep -FRlq -- "$STACK_ANON_KEY" "$APP_DIR/dist/assets" || die "fresh local build
 ok "fresh local build contains accepted key"
 
 # Repair ONLY this domain's Caddy block. Preserve every other hosted website.
-CADDY_FILE=/etc/caddy/Caddyfile
-[ -f "$CADDY_FILE" ] || die "Caddyfile missing: $CADDY_FILE"
+# Caddyfile path auto-detect: systemd unit --config, common paths, docker mount.
+detect_caddyfile() {
+  local p
+  p=$(systemctl cat caddy 2>/dev/null | grep -m1 -oE '\-\-config[= ]+[^ ]+' | sed -E 's/^--config[= ]+//') || true
+  [ -n "${p:-}" ] && [ -f "$p" ] && { printf '%s' "$p"; return 0; }
+  for p in /etc/caddy/Caddyfile /etc/caddy/caddy.json /opt/caddy/Caddyfile /srv/caddy/Caddyfile \
+           /root/caddy/Caddyfile /opt/smmpanel/Caddyfile /etc/caddy/conf.d/Caddyfile; do
+    [ -f "$p" ] && { printf '%s' "$p"; return 0; }
+  done
+  p=$(find /etc /opt /srv /root -maxdepth 4 -name Caddyfile -type f 2>/dev/null | head -1)
+  [ -n "${p:-}" ] && { printf '%s' "$p"; return 0; }
+  return 1
+}
+CADDY_FILE="$(detect_caddyfile || true)"
+if [ -z "${CADDY_FILE:-}" ]; then
+  if command -v caddy >/dev/null 2>&1 || systemctl list-unit-files 2>/dev/null | grep -q '^caddy'; then
+    CADDY_FILE=/etc/caddy/Caddyfile
+    mkdir -p /etc/caddy
+    : > "$CADDY_FILE"
+    log "Caddyfile nahi mila — naya banaya: $CADDY_FILE"
+  else
+    warn "Caddy install/config nahi mila — reverse proxy step skip (login key fix already applied)"
+    CADDY_FILE=""
+  fi
+fi
+if [ -n "$CADDY_FILE" ]; then
 cp "$CADDY_FILE" "${CADDY_FILE}.before-login-repair"
 APP_DOMAIN="$APP_DOMAIN" python3 - "$CADDY_FILE" <<'PY'
 import os, re, sys
@@ -281,8 +305,9 @@ if ! caddy validate --config "$CADDY_FILE"; then
   cp "${CADDY_FILE}.before-login-repair" "$CADDY_FILE"
   die "OrganicSMM Caddy route invalid; original config restored"
 fi
-systemctl reload caddy
+systemctl reload caddy || systemctl restart caddy || true
 ok "OrganicSMM Caddy route pinned to ports 3000/8000; other sites preserved"
+fi
 
 # Install a lightweight recurring guard. It only performs the expensive repair
 # when stack secrets, running auth, and the frontend bundle stop matching.

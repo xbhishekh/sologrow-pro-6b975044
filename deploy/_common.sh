@@ -5,6 +5,7 @@ SECRETS_FILE="${SECRETS_FILE:-/etc/smmpanel.secrets}"
 log()  { printf '\033[1;36m[%s]\033[0m %s\n' "$(date +%H:%M:%S)" "$*"; }
 ok()   { printf '\033[1;32m  OK\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[FAIL]\033[0m %s\n' "$*" >&2; exit 1; }
+warn() { printf '\033[1;33m[WARN]\033[0m %s\n' "$*" >&2; }
 need() { command -v "$1" >/dev/null 2>&1 || die "missing command: $1"; }
 
 load_secrets() {

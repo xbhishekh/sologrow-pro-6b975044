@@ -40,6 +40,7 @@ import {
   ShoppingCart,
   Ban,
   AlertTriangle,
+  Copy,
 } from 'lucide-react';
 import { Link, Navigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -779,6 +780,24 @@ export default function AdminUsers() {
               className="pl-10 h-10 rounded-xl"
             />
           </div>
+          <Button
+            variant="outline"
+            className="h-10 rounded-xl gap-2 shrink-0"
+            onClick={() => {
+              const gmails = (users || [])
+                .map((u) => u.email?.trim())
+                .filter((e) => e && e.toLowerCase().endsWith('@gmail.com'));
+              if (gmails.length === 0) {
+                toast.error('Koi @gmail.com user nahi mila');
+                return;
+              }
+              navigator.clipboard.writeText(gmails.join('\n'));
+              toast.success(`${gmails.length} Gmail IDs copy ho gayi — ek saath paste kar sakte ho`);
+            }}
+          >
+            <Copy className="h-4 w-4" />
+            Copy Gmail IDs
+          </Button>
         </div>
 
         {/* Users Grid */}

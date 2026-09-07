@@ -1030,6 +1030,10 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
     // ==========================================
     try {
       const staleCutoff = new Date(Date.now() - 60 * 1000).toISOString()
+      // Orders older than 24h that still have no provider order are dead
+      // (duplicate link, removed service, etc). Retrying them forever starves
+      // the queue for fresh orders, so the sweep ignores them.
+      const abandonCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       const { data: staleCandidates, error: staleCandidatesError } = await supabase
         .from('orders')
         .select('id, status, error_message, created_at')
@@ -1037,6 +1041,7 @@ async function processAllRuns(supabase: any, executionId: string, startTime: num
         .eq('is_organic_mode', false)
         .is('provider_order_id', null)
         .lt('updated_at', staleCutoff)
+        .gt('created_at', abandonCutoff)
         .order('created_at', { ascending: true })
         .limit(100)
 

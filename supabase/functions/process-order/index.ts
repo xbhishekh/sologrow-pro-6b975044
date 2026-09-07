@@ -47,6 +47,16 @@ function shouldTryNextProvider(errorMsg: string): boolean {
   return TRY_NEXT_ERRORS.some(e => lower.includes(e))
 }
 
+function isRetryableProviderError(errorMsg: string): boolean {
+  const lower = errorMsg.toLowerCase()
+  return shouldTryNextProvider(errorMsg)
+    || lower.includes('502')
+    || lower.includes('503')
+    || lower.includes('504')
+    || lower.includes('bad gateway')
+    || lower.includes('gateway timeout')
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -259,9 +269,15 @@ serve(async (req) => {
             continue
           }
           
-          // Last provider or permanent error — fail the order
-          await supabase.from('orders').update({ status: 'failed', error_message: errorMsg }).eq('id', order_id)
-          return new Response(JSON.stringify({ success: false, error: errorMsg }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+          // Busy, low-balance and provider outages are temporary. Keep the order
+          // queued so the scheduler retries it when an account becomes available.
+          const retryable = isRetryableProviderError(errorMsg)
+          await supabase.from('orders').update({
+            status: retryable ? 'pending' : 'failed',
+            error_message: retryable ? `[Queued] ${errorMsg}` : errorMsg,
+            updated_at: new Date().toISOString(),
+          }).eq('id', order_id)
+          return new Response(JSON.stringify({ success: false, queued: retryable, error: errorMsg }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
         // SUCCESS!
@@ -331,9 +347,15 @@ serve(async (req) => {
       }
     }
 
-    // All providers failed
-    await supabase.from('orders').update({ status: 'failed', error_message: `All providers failed. Last: ${lastError}` }).eq('id', order_id)
-    return new Response(JSON.stringify({ success: false, error: `All providers failed. Last: ${lastError}` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    // All providers were attempted. Temporary provider conditions stay queued;
+    // permanent validation errors remain failed for admin review.
+    const retryable = isRetryableProviderError(lastError)
+    await supabase.from('orders').update({
+      status: retryable ? 'pending' : 'failed',
+      error_message: retryable ? `[Queued] ${lastError}` : `All providers failed. Last: ${lastError}`,
+      updated_at: new Date().toISOString(),
+    }).eq('id', order_id)
+    return new Response(JSON.stringify({ success: false, queued: retryable, error: `All providers failed. Last: ${lastError}` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   } catch (error) {
       return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
